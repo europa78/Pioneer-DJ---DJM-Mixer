@@ -1173,10 +1173,11 @@
                     <span class="label-sub" style="background: transparent; color: #666; padding: 0; margin-top: 6px; font-size: 7px; letter-spacing: 0;">◄ PARAMETER 2 ►</span>
                 </div>
                 <div class="flex-row" style="gap: 4px;">
-                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">◀</div>
-                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">▶</div>
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;" onclick="adjustPadParameter(1, -1)">◀</div>
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;" onclick="adjustPadParameter(1, 1)">▶</div>
                 </div>
             </div>
+            <div class="label-sub" id="pad-status-1" style="text-align:left; margin: 2px 0 6px 0; color:#8aa;">MODE: HOT CUE</div>
 
             <div class="pad-modes">
                 <div class="mode-btn active" onclick="activatePadMode(1, 'HOT_CUE', this)">
@@ -1304,10 +1305,11 @@
                     <span class="label-sub" style="background: transparent; color: #666; padding: 0; margin-top: 6px; font-size: 7px; letter-spacing: 0;">◄ PARAMETER 2 ►</span>
                 </div>
                 <div class="flex-row" style="gap: 4px;">
-                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">◀</div>
-                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">▶</div>
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;" onclick="adjustPadParameter(2, -1)">◀</div>
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;" onclick="adjustPadParameter(2, 1)">▶</div>
                 </div>
             </div>
+            <div class="label-sub" id="pad-status-2" style="text-align:left; margin: 2px 0 6px 0; color:#8aa;">MODE: HOT CUE</div>
 
              <div class="pad-modes">
                 <div class="mode-btn active" onclick="activatePadMode(2, 'HOT_CUE', this)">
@@ -1616,6 +1618,8 @@
     function toggleShift() {
         isShiftDown = !isShiftDown;
         document.getElementById('shift-btn').classList.toggle('active', isShiftDown);
+        updatePadStatus(1);
+        updatePadStatus(2);
     }
 
     function toggleCfReverse(el) {
@@ -1656,13 +1660,15 @@
         // Initial sync of DOM state
         generateSamplerSounds();
         syncAllControls();
+        updatePadStatus(1);
+        updatePadStatus(2);
         startMetering();
     }
 
     // Synthesize some basic built-in sampler sounds
     function generateSamplerSounds() {
         if (!audioCtx) return;
-        for(let i=0; i<8; i++) {
+        for(let i=0; i<32; i++) {
             const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
             const data = buf.getChannelData(0);
             for(let j=0; j<data.length; j++) {
@@ -1742,7 +1748,7 @@
                 on: false, amount: 0 
             },
             loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null,
-            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0
+            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3
         };
     }
 
@@ -1995,7 +2001,9 @@
     // --- PAD & PERFORMANCE LOGIC ---
     const padColors = {
         'HOT_CUE': ['#00ffff', '#ff00ff', '#ffff00', '#ff0000', '#00ff00', '#0000ff', '#ff8800', '#ffffff'],
+        'PITCH_PLAY': Array(8).fill('#ffcc00'),
         'ROLL': Array(8).fill('#00ffff'),
+        'SLICER_LOOP': Array(8).fill('#00aaff'),
         'SLICER': Array(8).fill('#ff0000'),
         'SAMPLER': Array(8).fill('#ff00ff')
     };
@@ -2036,17 +2044,24 @@
 
     createPads(1, 'pads-left');
     createPads(2, 'pads-right');
+    updatePadStatus(1);
+    updatePadStatus(2);
 
     function activatePadMode(deckNum, mode, btn) {
         initAudio();
         const deck = decks[deckNum - 1];
         if(!deck) return;
-        deck.padMode = mode;
-        
+
+        // Manual behavior: SHIFT + HOT CUE enters Pitch Play, SHIFT + ROLL enters Slicer Loop.
+        if (mode === 'HOT_CUE' && isShiftDown) deck.padMode = 'PITCH_PLAY';
+        else if (mode === 'ROLL' && isShiftDown) deck.padMode = 'SLICER_LOOP';
+        else deck.padMode = mode;
+
         const siblings = btn.parentElement.children;
         for(let s of siblings) s.classList.remove('active');
         btn.classList.add('active');
-        
+
+        updatePadStatus(deckNum);
         updatePadLights(deckNum);
     }
 
@@ -2064,8 +2079,10 @@
             let isActive = false;
             if (deck.padMode === 'HOT_CUE' && deck.hotCues[i] !== null) isActive = true;
             if (deck.padMode === 'ROLL') isActive = true;
-            if (deck.padMode === 'SAMPLER') isActive = true;
+            if (deck.padMode === 'SAMPLER') isActive = !!getSamplerBuffer(deck, i);
             if (deck.padMode === 'SLICER' && deck.slices[i] !== undefined) isActive = true;
+            if (deck.padMode === 'PITCH_PLAY') isActive = true;
+            if (deck.padMode === 'SLICER_LOOP') isActive = true;
 
             if(isActive) {
                 pad.style.opacity = '1';
@@ -2078,6 +2095,104 @@
     }
 
     const rollTimes = [0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0]; // seconds (assuming ~120bpm)
+
+    const samplerBankLabels = ['A', 'B', 'C', 'D'];
+    const pitchRanges = [
+        [4, 5, 6, 7, 0, 1, 2, 3],
+        [0, 1, 2, 3, -4, -3, -2, -1],
+        [-3, -2, -1, 0, -7, -6, -5, -4]
+    ];
+    const pitchRangeNames = ['UP', 'MIDDLE', 'DOWN'];
+    const slicerLoopDomains = [2, 4, 8, 16, 32, 64]; // beats
+    const slicerLoopQuants = [0.125, 0.25, 0.5, 1.0]; // section fractions
+
+    function updatePadStatus(deckNum) {
+        const deck = decks[deckNum - 1];
+        const el = document.getElementById(`pad-status-${deckNum}`);
+        if (!deck || !el) return;
+
+        let msg = `MODE: ${deck.padMode.replace('_', ' ')}`;
+        if (deck.padMode === 'SAMPLER') {
+            msg += ` | BANK ${samplerBankLabels[deck.samplerBank]}`;
+        } else if (deck.padMode === 'PITCH_PLAY') {
+            msg += ` | RANGE ${pitchRangeNames[deck.pitchRangeIndex]} | SHIFT+PAD = SET CUE`;
+        } else if (deck.padMode === 'SLICER_LOOP') {
+            msg += ` | DOMAIN ${slicerLoopDomains[deck.slicerDomainIndex]}b | Q ${slicerLoopQuants[deck.slicerQuantIndex]}x`;
+        }
+        el.textContent = msg;
+    }
+
+    function adjustPadParameter(deckNum, direction) {
+        const deck = decks[deckNum - 1];
+        if (!deck) return;
+
+        if (deck.padMode === 'SAMPLER') {
+            deck.samplerBank = (deck.samplerBank + direction + samplerBankLabels.length) % samplerBankLabels.length;
+        } else if (deck.padMode === 'PITCH_PLAY') {
+            deck.pitchRangeIndex = (deck.pitchRangeIndex + direction + pitchRanges.length) % pitchRanges.length;
+        } else if (deck.padMode === 'SLICER_LOOP') {
+            if (isShiftDown) {
+                deck.slicerDomainIndex = Math.max(0, Math.min(slicerLoopDomains.length - 1, deck.slicerDomainIndex + direction));
+            } else {
+                deck.slicerQuantIndex = Math.max(0, Math.min(slicerLoopQuants.length - 1, deck.slicerQuantIndex + direction));
+            }
+        }
+
+        updatePadStatus(deckNum);
+        updatePadLights(deckNum);
+    }
+
+    function getSamplerBuffer(deck, padIdx) {
+        if (!samplerBuffers.length) return null;
+        const slot = deck.samplerBank * 8 + padIdx;
+        return samplerBuffers[slot] || samplerBuffers[padIdx] || null;
+    }
+
+    function getPitchRateFromSteps(steps) {
+        return Math.pow(2, steps / 12);
+    }
+
+    function playPitchPad(deck, deckNum, padIdx) {
+        if (!deck.audioBuffer) return;
+        const steps = pitchRanges[deck.pitchRangeIndex][padIdx] || 0;
+        const startTime = deck.hotCues[padIdx] ?? deck.audioEl.currentTime;
+        if (deck.activeSourceNode) {
+            try { deck.activeSourceNode.stop(); } catch(e) {}
+            deck.activeSourceNode = null;
+        }
+
+        deck.lineFader.gain.value = 0;
+        const src = audioCtx.createBufferSource();
+        src.buffer = deck.audioBuffer;
+        src.playbackRate.value = getPitchRateFromSteps(steps);
+
+        const tempFader = audioCtx.createGain();
+        const faderCap = document.getElementById(`fader-ch${deckNum}`);
+        const percent = parseFloat(faderCap.style.top) || 80;
+        tempFader.gain.value = Math.pow(1 - (percent / 100), 2);
+
+        src.connect(deck.filterHP).connect(tempFader).connect(deck.crossFader);
+        src.start(0, startTime);
+        deck.activeSourceNode = src;
+    }
+
+    function getDeckBeatLengthSeconds(deck) {
+        const bpm = parseFloat(deck.audioEl.dataset.bpm || '120');
+        return 60 / (Number.isFinite(bpm) && bpm > 0 ? bpm : 120);
+    }
+
+    function triggerSlicerLoopPad(deck, padIdx) {
+        if (!deck.audioBuffer || !deck.duration) return;
+        const beatLen = getDeckBeatLengthSeconds(deck);
+        const domainSec = slicerLoopDomains[deck.slicerDomainIndex] * beatLen;
+        const sectionLen = domainSec / 8;
+        const now = deck.audioEl.currentTime;
+        const domainStart = Math.floor(now / domainSec) * domainSec;
+        const start = Math.min(deck.duration, domainStart + (padIdx * sectionLen));
+        const duration = sectionLen * slicerLoopQuants[deck.slicerQuantIndex];
+        playBufferSource(deck, start, Math.max(0.03, duration), true);
+    }
+
 
     function handlePadDown(deckNum, padIdx, padEl) {
         padEl.classList.add('active');
@@ -2098,12 +2213,24 @@
             playBufferSource(deck, deck.audioEl.currentTime, rollLen, true);
         }
         else if (deck.padMode === 'SAMPLER') {
-            if (samplerBuffers[padIdx]) {
+            const sample = getSamplerBuffer(deck, padIdx);
+            if (sample) {
                 const src = audioCtx.createBufferSource();
-                src.buffer = samplerBuffers[padIdx];
+                src.buffer = sample;
                 src.connect(master.gain);
                 src.start();
             }
+        }
+        else if (deck.padMode === 'PITCH_PLAY') {
+            if (isShiftDown) {
+                deck.hotCues[padIdx] = deck.audioEl.currentTime;
+                updatePadLights(deckNum);
+            } else {
+                playPitchPad(deck, deckNum, padIdx);
+            }
+        }
+        else if (deck.padMode === 'SLICER_LOOP') {
+            triggerSlicerLoopPad(deck, padIdx);
         }
         else if (deck.padMode === 'SLICER') {
             if(!deck.audioBuffer || deck.slices[padIdx] === undefined) return;
@@ -2118,7 +2245,7 @@
         const deck = decks[deckNum - 1];
         if(!deck) return;
 
-        if (deck.padMode === 'ROLL' || deck.padMode === 'SLICER') {
+        if (deck.padMode === 'ROLL' || deck.padMode === 'SLICER' || deck.padMode === 'SLICER_LOOP' || deck.padMode === 'PITCH_PLAY') {
             if (deck.activeSourceNode) {
                 try { deck.activeSourceNode.stop(); } catch(e){}
                 deck.activeSourceNode = null;
