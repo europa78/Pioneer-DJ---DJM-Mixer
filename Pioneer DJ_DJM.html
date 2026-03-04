@@ -1,0 +1,2630 @@
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DJM-S11 Hardware Emulator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Oswald:wght@500;700&display=swap');
+
+        :root {
+            --bg-chassis: #111111;
+            --bg-panel: #1a1a1a;
+            --text-main: #e0e0e0;
+            --text-dim: #777;
+            --accent-orange: #ff7300;
+            --accent-blue: #0077ff;
+            --accent-red: #ff2a2a;
+            --accent-yellow: #ffcc00;
+            --pad-1: #00ffff;
+            --pad-2: #ff00ff;
+            --pad-3: #ffff00;
+            --pad-4: #ff0000;
+            --pad-5: #00ff00;
+            --pad-6: #0000ff;
+            --pad-7: #ff8800;
+            --pad-8: #ffffff;
+            --screen-bg: #050505;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        body {
+            background-color: #2a2a2a;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Roboto Condensed', sans-serif;
+        }
+
+        /* --- CHASSIS & LAYOUT --- */
+        .mixer {
+            background: var(--bg-chassis);
+            width: 100%;
+            max-width: 1100px;
+            border-radius: 8px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 2px 2px rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #222;
+            position: relative;
+        }
+
+        .screw {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #222;
+            border-radius: 50%;
+            box-shadow: inset 1px 1px 2px #000, 1px 1px 1px #444;
+        }
+
+        /* Top Section: 5 Columns */
+        .mixer-top {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr 1.6fr 0.9fr 1.1fr;
+            padding: 20px 10px;
+            border-bottom: 2px solid #0a0a0a;
+            background: linear-gradient(180deg, #1c1c1c 0%, #0a0a0a 100%);
+            gap: 10px;
+        }
+
+        .channel-strip {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            position: relative;
+        }
+
+        .center-screen-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 10px;
+            border-left: 1px solid #222;
+            border-right: 1px solid #222;
+        }
+
+        /* Bottom Section: Pads & Faders */
+        .mixer-bottom {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1fr;
+            padding: 20px;
+            background: var(--bg-chassis);
+            gap: 15px;
+        }
+
+        /* --- TYPOGRAPHY & LABELS --- */
+        .label {
+            color: var(--text-main);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            font-weight: 700;
+        }
+        .label.dim { color: var(--text-dim); }
+        .label-sub {
+            color: var(--text-dim);
+            font-size: 8px;
+            text-transform: uppercase;
+            text-align: center;
+            margin-top: 2px;
+        }
+        .shift-box {
+            border: 1px solid #777;
+            border-radius: 2px;
+            padding: 1px 4px;
+            background: transparent;
+            display: inline-block;
+        }
+        
+        .hardware-box {
+            border: 1px solid #555;
+            border-bottom: none;
+            border-radius: 0;
+            padding: 0 8px 10px 8px;
+            margin: 15px 0 0 0;
+            width: 100%;
+        }
+        
+        .hardware-box legend {
+            color: var(--text-main);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            padding: 0 4px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .label-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* --- KNOBS --- */
+        .knob-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .knob-bg {
+            width: 44px;
+            height: 44px;
+            background: #000;
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.1), 0 2px 5px rgba(0,0,0,0.8);
+        }
+
+        .knob-bg::before {
+            content: '';
+            position: absolute;
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: #444;
+            opacity: 0.5;
+        }
+
+        .knob {
+            width: 32px;
+            height: 32px;
+            background: radial-gradient(circle at 50% 50%, #444 0%, #111 80%);
+            border-radius: 50%;
+            position: relative;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.6), inset 0 1px 2px rgba(255,255,255,0.2);
+            transform: rotate(0deg); /* Initialize visually from JS */
+            transition: transform 0.05s linear;
+        }
+
+        .knob.large {
+            width: 40px; height: 40px;
+        }
+
+        .knob-pointer {
+            position: absolute;
+            top: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 10px;
+            background: white;
+            border-radius: 2px;
+            box-shadow: 0 0 2px rgba(255,255,255,0.5);
+        }
+
+        .knob-bg.filter .knob-pointer { background: #ccc; }
+
+        .knob-bg.detent::after {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 4px;
+            background: #fff;
+            border-radius: 1px;
+            box-shadow: 0 0 2px rgba(255,255,255,0.8);
+        }
+
+        .scale-marks {
+            display: flex;
+            justify-content: space-between;
+            width: 60px;
+            font-size: 8px;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        /* --- FADERS --- */
+        .fader-core-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        .faders-and-meters {
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+            width: 100%;
+            height: 200px;
+            padding: 0 20px;
+        }
+
+        .fader-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            width: 60px;
+        }
+
+        .fader-track-container {
+            position: relative;
+            width: 60px;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .fader-slot {
+            width: 6px;
+            height: 160px;
+            background: #000;
+            border-radius: 3px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1);
+            position: relative;
+        }
+
+        .fader-cap {
+            position: absolute;
+            width: 30px;
+            height: 50px;
+            background: linear-gradient(90deg, #222 0%, #444 20%, #444 80%, #222 100%);
+            border: 1px solid #111;
+            border-radius: 4px;
+            box-shadow: 0 10px 15px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.3);
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .fader-cap::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            width: 80%;
+            height: 2px;
+            background: white;
+            transform: translateY(-50%);
+            box-shadow: 0 0 2px rgba(255,255,255,0.8);
+        }
+
+        /* --- FADER TICKS --- */
+        .fader-ticks {
+            position: absolute;
+            height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .fader-ticks.left { left: 8px; align-items: flex-end; }
+        .fader-ticks.right { right: 8px; align-items: flex-start; }
+        .tick { width: 4px; height: 1.5px; background: #444; }
+        .tick.major { width: 8px; background: #aaa; }
+
+        .cf-ticks {
+            position: absolute;
+            width: 100%;
+            top: -12px;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 10px;
+        }
+        .cf-tick { width: 1.5px; height: 4px; background: #444; }
+        .cf-tick.major { height: 8px; background: #aaa; }
+
+        .crossfader-container {
+            width: 100%;
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .crossfader-slot {
+            width: 220px;
+            height: 6px;
+            background: #000;
+            border-radius: 3px;
+            position: relative;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1);
+        }
+
+        .crossfader-cap {
+            position: absolute;
+            width: 40px;
+            height: 26px;
+            background: linear-gradient(180deg, #222 0%, #555 20%, #555 80%, #222 100%);
+            border: 1px solid #000;
+            border-radius: 2px;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.4);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+        }
+        .crossfader-cap::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 10%;
+            height: 80%;
+            width: 2px;
+            background: white;
+            transform: translateX(-50%);
+        }
+
+        /* --- PADS --- */
+        .pad-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            background: #111;
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.8);
+        }
+
+        .perf-pad {
+            aspect-ratio: 1.2;
+            background: #222;
+            border-radius: 4px;
+            border: 2px solid #000;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.1s;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        .perf-pad.active {
+            background: var(--pad-color);
+            box-shadow: 0 0 15px var(--pad-color), inset 0 0 5px #fff;
+            border-color: #fff;
+            transform: scale(0.96);
+        }
+
+        /* Pad Mode Buttons */
+        .pad-modes {
+            display: flex;
+            gap: 4px;
+            margin-top: 10px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            background: #2a2a2a;
+            border: 1px solid #111;
+            padding: 4px 0;
+            font-size: 9px;
+            text-align: center;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: 2px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            color: #aaa;
+        }
+
+        .mode-btn.active {
+            background: #111;
+            border-color: #555;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.8);
+        }
+
+        .mode-btn .sub {
+            font-size: 7px;
+            color: #666;
+            background: #1a1a1a;
+            margin: 0 2px;
+            border-radius: 2px;
+        }
+
+        /* --- BUTTONS & TOGGLES --- */
+        .btn-rect {
+            background: #1a1a1a;
+            color: var(--text-dim);
+            border: 2px solid #111;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+            text-align: center;
+        }
+
+        .btn-rect.active {
+            background: var(--accent-orange);
+            color: #fff;
+            border-color: #fff;
+            box-shadow: 0 0 10px var(--accent-orange);
+            transform: translateY(1px);
+        }
+
+        .btn-orange {
+            color: var(--accent-orange);
+            border-color: var(--accent-orange);
+        }
+
+        .btn-blue {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-blue.active {
+            background: var(--accent-blue);
+            box-shadow: 0 0 10px var(--accent-blue);
+        }
+
+        .fx-btn-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            margin-top: 5px;
+            width: 100%;
+        }
+
+        .fx-btn {
+            background: #111;
+            color: var(--accent-blue);
+            border: 1px solid #333;
+            padding: 8px 2px;
+            font-size: 9px;
+            font-weight: bold;
+            border-radius: 3px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .fx-btn.active {
+            background: var(--accent-blue);
+            color: #fff;
+            box-shadow: 0 0 10px var(--accent-blue);
+            border-color: #fff;
+        }
+
+        /* FX Paddles */
+        .fx-paddle-container {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 20px;
+        }
+
+        .fx-paddle {
+            width: 34px;
+            height: 60px;
+            background: #222;
+            border-radius: 4px;
+            position: relative;
+            box-shadow: inset 0 0 10px #000;
+        }
+
+        .paddle-lever {
+            width: 28px;
+            height: 20px;
+            background: linear-gradient(180deg, #eee, #999);
+            position: absolute;
+            left: 3px;
+            top: 20px;
+            border-radius: 2px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.8);
+            transition: top 0.1s;
+        }
+        .paddle-lever::after {
+            content: ''; position: absolute; top: 8px; left: 2px; width: 24px; height: 4px; background: var(--accent-blue); opacity: 0.5;
+        }
+        .fx-paddle.locked .paddle-lever { top: 0px; box-shadow: 0 8px 10px rgba(0,0,0,0.8); }
+        .fx-paddle.locked .paddle-lever::after { opacity: 1; box-shadow: 0 0 5px var(--accent-blue); }
+        .fx-paddle.momentary .paddle-lever { top: 40px; box-shadow: 0 2px 3px rgba(0,0,0,0.8); }
+
+        /* --- SCREEN --- */
+        .screen-bezel {
+            background: #111;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.9), 0 2px 5px rgba(255,255,255,0.05);
+            width: 100%;
+            max-width: 280px;
+            margin-top: 10px;
+        }
+
+        .screen-display {
+            background: var(--screen-bg);
+            height: 180px;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .screen-tabs {
+            display: flex;
+            background: #222;
+            font-size: 10px;
+        }
+
+        .screen-tab {
+            flex: 1;
+            padding: 6px;
+            text-align: center;
+            color: #888;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+
+        .screen-tab.active {
+            color: #fff;
+            background: #111;
+            border-bottom: 2px solid var(--accent-blue);
+        }
+
+        .screen-content {
+            flex: 1;
+            position: relative;
+            display: none;
+            padding: 10px;
+        }
+        .screen-content.active { display: flex; flex-direction: column; }
+
+        /* Real Canvas View - VERTICAL ORIENTATION */
+        .wave-view {
+            width: 100%; height: 100%;
+            display: flex; flex-direction: row; justify-content: space-between;
+        }
+        .wave-deck {
+            width: 50%; height: 100%;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+            cursor: ns-resize;
+            border-right: 1px solid #222;
+        }
+        .wave-deck canvas {
+            width: 100%; height: 100%; position: absolute; left: 0; top: 0; pointer-events: none;
+        }
+        .playhead {
+            position: absolute; left: 0; right: 0; height: 2px; background: rgba(255,255,255,0.9); box-shadow: 0 0 4px #fff; z-index: 10; pointer-events: none;
+        }
+        .loop-region {
+            position: absolute; left: 0; right: 0; z-index: 1; pointer-events: none;
+        }
+        .loop-marker {
+            position: absolute; left: 0; right: 0; height: 8px; z-index: 11; cursor: ns-resize; transform: translateY(-50%);
+        }
+        .loop-marker::after {
+            content: ''; position: absolute; top: 50%; transform: translateY(-50%); border: 6px solid transparent; border-left-color: var(--accent-orange); left: 0;
+        }
+        .loop-marker.in::after { border-left-color: var(--accent-orange); left: 0; }
+        .loop-marker.out::after { border-left-color: transparent; border-right-color: var(--accent-orange); left: auto; right: 0; }
+        
+        /* Mock FX View */
+        .fx-view { color: #fff; align-items: center; justify-content: center; gap: 10px; }
+        .fx-title { font-size: 24px; font-weight: bold; color: var(--accent-blue); text-shadow: 0 0 10px var(--accent-blue); }
+        .fx-param { font-size: 14px; background: #333; padding: 5px 15px; border-radius: 10px; }
+
+        /* --- S11 SCREEN ENHANCEMENTS (From Reference Images) --- */
+        .s11-screen-topbar {
+            display: flex; justify-content: space-between; align-items: center; background: #000; color: #fff; font-size: 12px; font-weight: bold; padding: 2px 4px; border-bottom: 1px solid #333;
+        }
+        .s11-screen-fxbar {
+            background: #111; border-top: 1px solid #333; color: #fff; text-align: center; padding: 4px; display: flex; flex-direction: column; justify-content: center; height: 35px;
+        }
+        .s11-menu-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px; flex: 1;
+        }
+        .s11-menu-btn {
+            background: #1a1a1a; border: 1px solid #2a2a2a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; border-radius: 2px; cursor: pointer; font-weight: bold; text-align: center; padding: 8px 0;
+        }
+        .s11-menu-btn:active { background: #333; }
+        .s11-track-list {
+            flex: 1; background: #000; overflow-y: auto; font-size: 11px; color: #ccc;
+        }
+        .s11-track-item {
+            padding: 4px 6px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+        }
+        .s11-track-item:hover { background: #2a2a2a; }
+        .s11-track-item.selected { background: #0055aa; color: #fff; }
+        
+        .deck-badge { background: #333; border-radius: 2px; padding: 0 4px; font-size: 9px; display: inline-block; }
+        .deck-badge.sync { background: #0055aa; color: #fff; }
+        .key-badge { padding: 1px 4px; border-radius: 2px; font-size: 9px; font-weight: bold; color: #000; }
+
+        /* --- VU METERS --- */
+        .vu-meter-group {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            align-items: center;
+            height: 140px;
+            background: #050505;
+            padding: 15px 12px;
+            border-radius: 6px;
+            border: 1px solid #222;
+            box-shadow: inset 0 5px 10px #000;
+        }
+        .vu-meter-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .vu-channel {
+            display: flex; flex-direction: column-reverse; gap: 2px; width: 12px;
+        }
+        .vu-led {
+            width: 12px; height: 4px; background: #222; border-radius: 1px;
+        }
+        .vu-led.green.on { background: #0f0; box-shadow: 0 0 5px #0f0; }
+        .vu-led.yellow.on { background: #ff0; box-shadow: 0 0 5px #ff0; }
+        .vu-led.red.on { background: #f00; box-shadow: 0 0 5px #f00; }
+
+        /* Utility classes */
+        .mt-5 { margin-top: 5px; }
+        .mt-10 { margin-top: 10px; }
+        .mt-20 { margin-top: 20px; }
+        .flex-row { display: flex; gap: 10px; }
+        .w-full { width: 100%; }
+        
+        /* --- MULTI-VIEW PANELS --- */
+        .view-selector {
+            display: flex; gap: 15px; margin-bottom: 20px; justify-content: center; width: 100%; max-width: 1100px;
+        }
+        .mixer-panel { display: none; }
+        .mixer-panel.active { display: flex; }
+        .flex-column { display: flex; flex-direction: column; }
+
+        /* Front Panel Hardware */
+        .metal-switch { width: 16px; height: 32px; background: #0a0a0a; border-radius: 3px; position: relative; cursor: pointer; border: 1px solid #222; box-shadow: inset 0 2px 4px #000; }
+        .metal-switch .lever { width: 12px; height: 16px; background: linear-gradient(180deg, #ccc, #888); position: absolute; left: 1px; bottom: 2px; border-radius: 2px; transition: bottom 0.1s; box-shadow: 0 2px 3px rgba(0,0,0,0.8); }
+        .metal-switch.on .lever { bottom: 12px; box-shadow: 0 -2px 3px rgba(0,0,0,0.8); }
+        .slider-switch { width: 14px; height: 20px; background: #000; border: 1px solid #333; position: relative; cursor: pointer; border-radius: 2px; }
+        .slider-switch .slider-knob { width: 10px; height: 8px; background: #222; border: 1px solid #555; position: absolute; bottom: 1px; left: 1px; transition: bottom 0.1s; }
+        .slider-switch.on .slider-knob { bottom: 9px; }
+        .jack-quarter { width: 24px; height: 24px; background: #111; border: 2px solid #b8860b; border-radius: 50%; position: relative; box-shadow: 0 0 0 2px #000, inset 0 2px 5px #000; }
+        .jack-quarter::after { content: ''; position: absolute; top: 6px; left: 6px; width: 8px; height: 8px; background: #000; border-radius: 50%; }
+        .jack-eighth { width: 14px; height: 14px; background: #111; border: 2px solid #555; border-radius: 50%; position: relative; box-shadow: 0 0 0 2px #000, inset 0 2px 3px #000; }
+        .jack-eighth::after { content: ''; position: absolute; top: 3px; left: 3px; width: 4px; height: 4px; background: #000; border-radius: 50%; }
+
+        /* Rear Panel Hardware */
+        .rca-jack { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #ffd700, #b8860b); position: relative; display: flex; justify-content: center; align-items: center; box-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        .rca-inner { width: 8px; height: 8px; border-radius: 50%; border: 2px solid #fff; background: #000; }
+        .rca-jack.red .rca-inner { border-color: #f00; }
+        .xlr-jack { width: 32px; height: 32px; border-radius: 50%; background: #111; border: 2px solid #333; position: relative; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 2px 5px #000; }
+        .xlr-pin { width: 4px; height: 4px; border-radius: 50%; background: #ccc; position: absolute; }
+        .xlr-pin:nth-child(1) { top: 8px; left: 14px; }
+        .xlr-pin:nth-child(2) { top: 18px; left: 8px; }
+        .xlr-pin:nth-child(3) { top: 18px; right: 8px; }
+        .usb-b { width: 16px; height: 16px; background: #000; border: 2px solid #aaa; border-radius: 2px 2px 0 0; position: relative; }
+        .usb-a { width: 18px; height: 8px; background: #000; border: 2px solid #aaa; position: relative; }
+        .ac-in { width: 40px; height: 30px; background: #111; border: 2px solid #222; border-radius: 4px; position: relative; display: flex; justify-content: space-around; align-items: center; padding: 5px; }
+        .ac-prong { width: 6px; height: 10px; background: #000; border-radius: 1px; }
+
+    </style>
+</head>
+<body style="flex-direction: column; align-items: center;">
+
+<!-- AUDIO ENGINE ELEMENTS -->
+<audio id="audio-deck1" crossorigin="anonymous"></audio>
+<audio id="audio-deck2" crossorigin="anonymous"></audio>
+<input type="file" id="file-upload-1" accept="audio/*" style="display:none" onchange="loadTrack(1, this.files[0])">
+<input type="file" id="file-upload-2" accept="audio/*" style="display:none" onchange="loadTrack(2, this.files[0])">
+
+<div class="view-selector">
+    <div class="btn-rect active" id="btn-top" onclick="switchView('top')">TOP PANEL</div>
+    <div class="btn-rect" id="btn-front" onclick="switchView('front')">FRONT PANEL</div>
+    <div class="btn-rect" id="btn-rear" onclick="switchView('rear')">REAR PANEL</div>
+</div>
+
+<div class="mixer mixer-panel active" id="panel-top">
+    <!-- Cosmetic screws -->
+    <div class="screw" style="top: 10px; left: 10px;"></div>
+    <div class="screw" style="top: 10px; right: 10px;"></div>
+    <div class="screw" style="bottom: 10px; left: 10px;"></div>
+    <div class="screw" style="bottom: 10px; right: 10px;"></div>
+
+    <!-- TOP SECTION -->
+    <div class="mixer-top">
+        
+        <!-- COLUMN 1: FAR LEFT (Browse, Loop, FX) -->
+        <div class="channel-strip">
+            <div class="flex-row w-full" style="justify-content: space-around;">
+                <div class="label-group">
+                    <span class="label">LINE &nbsp; PHONO</span>
+                    <div class="btn-rect" style="padding: 2px 8px; font-size: 8px;">A &nbsp; B</div>
+                </div>
+            </div>
+
+            <div class="knob-wrapper mt-10" onclick="switchTab(3)">
+                <span class="label">BROWSE</span>
+                <div class="knob-bg"><div class="knob large" data-val="0"><div class="knob-pointer"></div></div></div>
+                <span class="label-sub">- INST. DOUBLES</span>
+            </div>
+
+            <div class="flex-row w-full mt-5" style="justify-content: space-between;">
+                <div class="label-group" style="flex: 1;">
+                    <div class="btn-rect w-full" style="padding: 4px 0;" onclick="togglePlay(1)" id="play-btn-1">BACK</div>
+                    <span class="label-sub shift-box">VIEW</span>
+                </div>
+                <div class="label-group" style="flex: 1;">
+                    <div class="btn-rect w-full" style="padding: 4px 0;" onclick="document.getElementById('file-upload-1').click()">LOAD</div>
+                    <span class="label-sub shift-box">PREPARE</span>
+                </div>
+            </div>
+
+            <fieldset class="hardware-box">
+                <legend>LOOP</legend>
+                
+                <div class="label-group w-full mt-5">
+                    <div class="btn-rect btn-orange w-full" id="loop-active-1" onclick="toggleLoop(1)">AUTO LOOP</div>
+                    <span class="label-sub shift-box">ACTIVE</span>
+                </div>
+
+                <div class="flex-row w-full mt-10" style="justify-content: space-between;">
+                    <div class="label-group" style="flex: 1;">
+                        <div class="btn-rect btn-orange w-full" style="padding: 4px 0;" onclick="handleLoopInHalf(1)">1/2X</div>
+                        <span class="label-sub shift-box">IN</span>
+                    </div>
+                    <div class="label-group" style="flex: 1;">
+                        <div class="btn-rect btn-orange w-full" style="padding: 4px 0;" onclick="handleLoopOutDouble(1)">2X</div>
+                        <span class="label-sub shift-box">OUT</span>
+                    </div>
+                </div>
+            </fieldset>
+
+            <div class="label-group w-full mt-10">
+                <span class="label" style="color: var(--accent-blue);">BEAT FX SELECT</span>
+                <div class="fx-btn-grid">
+                    <div class="fx-btn active" onclick="toggleFx(this)">ECHO</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">BACK<br>SPIN</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">FLANGER</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">REVERB</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">VINYL<br>BRAKE</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">PHASER</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUMN 2: INNER LEFT (EQ & Filter) -->
+        <div class="channel-strip">
+            <div class="knob-wrapper mt-20">
+                <span class="label">TRIM</span>
+                <div class="knob-bg detent"><div class="knob" id="trim-1" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+9</span></div>
+            </div>
+            
+            <div class="knob-wrapper mt-10">
+                <span class="label">HI</span>
+                <div class="knob-bg detent"><div class="knob" id="eq-hi-1" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+6</span></div>
+            </div>
+            <div class="knob-wrapper mt-5">
+                <span class="label">MID</span>
+                <div class="knob-bg detent"><div class="knob" id="eq-mid-1" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+6</span></div>
+            </div>
+            <div class="knob-wrapper mt-5">
+                <span class="label">LOW</span>
+                <div class="knob-bg detent"><div class="knob" id="eq-low-1" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+6</span></div>
+            </div>
+
+            <div class="knob-wrapper mt-10">
+                <span class="label">FILTER</span>
+                <div class="knob-bg filter detent"><div class="knob" id="filter-1" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>LPF</span><span>HPF</span></div>
+            </div>
+        </div>
+
+        <!-- COLUMN 3: CENTER (Master, Screen, Paddles) -->
+        <div class="center-screen-section">
+            <div class="flex-row w-full" style="justify-content: space-around;">
+                <div class="knob-wrapper">
+                    <span class="label">BOOTH LEVEL</span>
+                    <div class="knob-bg"><div class="knob" id="booth-level" data-val="-135"><div class="knob-pointer"></div></div></div>
+                </div>
+                <div class="knob-wrapper">
+                    <span class="label">MASTER LEVEL</span>
+                    <div class="knob-bg"><div class="knob" id="master-level" data-val="-135"><div class="knob-pointer"></div></div></div>
+                </div>
+            </div>
+
+            <!-- Screen -->
+            <div class="screen-bezel">
+                <div class="screen-display">
+                    <div class="screen-tabs">
+                        <div class="screen-tab active" onclick="switchTab(0)">WAVE</div>
+                        <div class="screen-tab" onclick="switchTab(1)">FX</div>
+                        <div class="screen-tab" onclick="switchTab(2)">MENU</div>
+                        <div class="screen-tab" onclick="switchTab(3)">BROWSE</div>
+                    </div>
+                    
+                    <div class="screen-content active" id="tab-0" style="padding: 0; justify-content: space-between;">
+                        <!-- Top Info Bar -->
+                        <div style="display:flex; justify-content:space-between; background:#000; color:#fff; padding:2px 4px; font-size:10px; border-bottom:1px solid #333;">
+                            <span><span style="color:#aaa;">↻</span> 1/2</span>
+                            <span style="font-size:12px; font-weight:bold;">110.0</span>
+                            <span style="font-size:12px; font-weight:bold;">110.0</span>
+                            <span><span style="color:#aaa;">↻</span> 8</span>
+                        </div>
+                        <!-- Sync Header -->
+                        <div style="display:flex; background:#111; height:22px; border-bottom: 1px solid #333;">
+                            <div style="flex:1; display:flex; border-right:1px solid #333;">
+                                <div style="flex:1; background:#0055aa; display:flex; justify-content:center; align-items:center; border-right:1px solid #222; font-size:12px;">🎵🔒</div>
+                                <div style="flex:1; background:#0055aa; color:#fff; font-size:9px; font-weight:bold; display:flex; justify-content:center; align-items:center;">SYNC</div>
+                            </div>
+                            <div style="flex:1; display:flex;">
+                                <div style="flex:1; background:#222; color:#888; font-size:9px; font-weight:bold; display:flex; justify-content:center; align-items:center; border-right:1px solid #111;">SYNC</div>
+                                <div style="flex:1; background:#222; color:#888; display:flex; justify-content:center; align-items:center; font-size:12px;">🎵🔒</div>
+                            </div>
+                        </div>
+
+                        <!-- Vertical Waveforms -->
+                        <div class="wave-view" style="padding: 0; flex: 1;">
+                            <div class="wave-deck" id="wave-deck-1">
+                                <canvas id="canvas-deck-1"></canvas>
+                                <div class="loop-region" id="loop-region-1" style="display:none; top:0; height:0;"></div>
+                                <div class="playhead" id="playhead-1" style="top:0;"></div>
+                                <div class="loop-marker in" id="loop-in-1" style="display:none; top:0;"></div>
+                                <div class="loop-marker out" id="loop-out-1" style="display:none; top:0;"></div>
+                            </div>
+                            <div class="wave-deck" id="wave-deck-2" style="border-right: none;">
+                                <canvas id="canvas-deck-2"></canvas>
+                                <div class="loop-region" id="loop-region-2" style="display:none; top:0; height:0;"></div>
+                                <div class="playhead" id="playhead-2" style="top:0;"></div>
+                                <div class="loop-marker in" id="loop-in-2" style="display:none; top:0;"></div>
+                                <div class="loop-marker out" id="loop-out-2" style="display:none; top:0;"></div>
+                            </div>
+                        </div>
+
+                        <div class="s11-screen-fxbar">
+                            <div style="font-size: 14px; font-weight: bold; letter-spacing: 1px;">ECHO</div>
+                            <div style="font-size: 9px; display: flex; justify-content: space-between; padding: 0 10px; color: #aaa;">
+                                <span><span style="background:#fff; color:#000; padding:0 2px; border-radius:1px;">AUTO</span> 110.0</span>
+                                <span>◀ 1 ▶</span>
+                                <span style="font-size: 12px;">≡</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="screen-content fx-view" id="tab-1">
+                        <div class="fx-title">ECHO</div>
+                        <div class="fx-param" id="fx-time-display">TIME: 500ms</div>
+                        <input type="range" id="fx-time-slider" min="50" max="1000" step="10" value="500" oninput="updateFXParams()">
+                        <div class="fx-param" id="fx-feedback-display">FBACK: 50%</div>
+                        <input type="range" id="fx-feedback-slider" min="0" max="0.95" step="0.05" value="0.5" oninput="updateFXParams()">
+                    </div>
+                    
+                    <div class="screen-content" id="tab-2" style="padding: 0; background: #050505; display: flex; flex-direction: column;">
+                        <div style="background:#1a1a1a; color:#fff; padding:6px 10px; font-size:12px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+                            <span>MENU</span>
+                            <span style="background:#333; padding:2px 6px; border-radius:2px;">⚙️</span>
+                        </div>
+                        <div style="padding:4px; display:flex; flex-direction:column; gap:4px; flex:1;">
+                            <div class="s11-menu-grid">
+                                <div class="s11-menu-btn" onclick="switchTab(3)">
+                                    <span style="color:#00aaff; font-size:18px; margin-bottom:2px;">🎵≡</span>
+                                    BROWSE
+                                </div>
+                                <div class="s11-menu-btn" onclick="switchTab(1)">
+                                    <span style="color:#fff; font-size:18px; margin-bottom:2px;">🔧<span style="color:#00aaff;font-size:10px;">FX</span></span>
+                                    FX SETTING
+                                </div>
+                                <div class="s11-menu-btn">
+                                    <span style="color:#00aaff; font-size:16px; margin-bottom:2px;">▦</span>
+                                    TOUCH MIDI
+                                </div>
+                                <div class="s11-menu-btn">
+                                    <span style="color:#00aaff; font-size:16px; margin-bottom:2px;">◍</span>
+                                    TOUCH FX
+                                </div>
+                                <div class="s11-menu-btn" style="flex-direction:row; justify-content:space-around;">
+                                    <div style="display:flex; flex-direction:column; align-items:center;">
+                                        <span style="background:#fff; color:#000; padding:2px 6px; font-size:14px;">3</span>
+                                        <span style="font-size:7px; margin-top:2px;">DECK 3</span>
+                                    </div>
+                                    <div style="display:flex; flex-direction:column; align-items:center;">
+                                        <span style="background:#fff; color:#000; padding:2px 6px; font-size:14px;">4</span>
+                                        <span style="font-size:7px; margin-top:2px;">DECK 4</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="s11-menu-btn" style="padding:8px 0;" onclick="switchTab(0)">
+                                <div style="display:flex; gap:10px; align-items:center; justify-content:center; color:#ff5500; font-size:14px;">
+                                    <span>▶</span> <span>▤</span> <span>◀</span> <span style="color:#00aaff;">▥</span>
+                                </div>
+                                <span style="margin-top:4px;">WAVEFORM</span>
+                            </div>
+                        </div>
+                        <div class="s11-screen-fxbar">
+                            <div style="font-size: 14px; font-weight: bold;">ECHO</div>
+                        </div>
+                    </div>
+
+                    <div class="screen-content" id="tab-3" style="padding: 0; background: #000; display:flex; flex-direction:column;">
+                        <div style="text-align:center; font-size:8px; color:#aaa; padding:2px 0; border-bottom:1px solid #333;">crate / All</div>
+                        <div style="display:flex; background:#111; color:#fff; font-size:9px; border-bottom:1px solid #333;">
+                            <div style="flex:1; text-align:center; padding:2px; border-right:1px solid #222;">
+                                <div>DECK1</div><div style="color:#aaa;">110.0 <span class="key-badge" style="background:#ffaa00;">4A</span></div>
+                            </div>
+                            <div style="padding:2px 6px; display:flex; align-items:center; background:#222; border-right:1px solid #222;">
+                                BPM ▼
+                            </div>
+                            <div style="flex:1; text-align:center; padding:2px;">
+                                <div>DECK2</div><div style="color:#aaa;">110.0 <span class="key-badge" style="background:#00ff00;">8A</span></div>
+                            </div>
+                        </div>
+                        <div class="s11-track-list">
+                            <div class="s11-track-item selected">
+                                <div style="flex:1; overflow:hidden;">
+                                    <div style="color:#fff; font-size:11px; white-space:nowrap;">rice delectamentum</div>
+                                    <div style="color:#888; font-size:9px; white-space:nowrap;">Marc Bunny, Katy Smit</div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:flex-end; width:30px;">
+                                    <div style="color:#fff; font-size:10px;">90</div>
+                                    <div class="key-badge" style="background:#00aaff;">11A</div>
+                                </div>
+                            </div>
+                            <div class="s11-track-item">
+                                <div style="flex:1; overflow:hidden;">
+                                    <div style="color:#fff; font-size:11px; white-space:nowrap;">Tomorrow den (Clean)</div>
+                                    <div style="color:#888; font-size:9px; white-space:nowrap;">Kygo & Lazer</div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:flex-end; width:30px;">
+                                    <div style="color:#fff; font-size:10px;">95</div>
+                                    <div class="key-badge" style="background:#ffaa00;">4A</div>
+                                </div>
+                            </div>
+                            <div class="s11-track-item">
+                                <div style="flex:1; overflow:hidden;">
+                                    <div style="color:#fff; font-size:11px; white-space:nowrap;">Oculis meis inanis</div>
+                                    <div style="color:#888; font-size:9px; white-space:nowrap;">Martin Rocky</div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:flex-end; width:30px;">
+                                    <div style="color:#fff; font-size:10px;">98</div>
+                                    <div class="key-badge" style="background:#ff5555;">6A</div>
+                                </div>
+                            </div>
+                            <div class="s11-track-item">
+                                <div style="flex:1; overflow:hidden;">
+                                    <div style="color:#fff; font-size:11px; white-space:nowrap;">Good taste (feat. ktk)</div>
+                                    <div style="color:#888; font-size:9px; white-space:nowrap;">Nears</div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:flex-end; width:30px;">
+                                    <div style="color:#fff; font-size:10px;">105</div>
+                                    <div class="key-badge" style="background:#ffaa00;">4A</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="s11-screen-fxbar">
+                            <div style="font-size: 14px; font-weight: bold;">ECHO</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen Controls -->
+            <div class="flex-row mt-10 w-full" style="justify-content: center;">
+                <div class="label-group">
+                    <div class="btn-rect" style="padding: 4px 12px;" onclick="this.classList.toggle('active')">◀</div>
+                    <span class="label-sub">&lt; BANK</span>
+                </div>
+                <div class="label-group">
+                    <div class="btn-rect" style="padding: 4px 20px;" onclick="this.classList.toggle('active')">TAP</div>
+                    <span class="label-sub">AUTO/BPM</span>
+                </div>
+                <div class="label-group">
+                    <div class="btn-rect" style="padding: 4px 12px;" onclick="this.classList.toggle('active')">▶</div>
+                    <span class="label-sub">BANK &gt;</span>
+                </div>
+            </div>
+
+            <!-- FX Level/Depth -->
+            <div class="knob-wrapper mt-10">
+                <span class="label">LEVEL / DEPTH</span>
+                <div class="knob-bg"><div class="knob large" id="fx-level" data-val="-135"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks" style="width: 70px;"><span>MIN</span><span>MAX</span></div>
+            </div>
+
+            <div class="btn-rect mt-10" id="shift-btn" style="width: 80px; padding: 6px 0;" onclick="toggleShift()">SHIFT</div>
+
+            <!-- FX Paddles -->
+            <div class="fx-paddle-container">
+                <div class="label-group">
+                    <span class="label">LOCK ON</span>
+                    <div class="fx-paddle" id="paddle-l">
+                        <div class="paddle-lever" onmousedown="paddleDown('paddle-l')" onmouseup="paddleUp('paddle-l')" ondblclick="paddleLock('paddle-l')"></div>
+                    </div>
+                    <span class="label mt-5">ON</span>
+                </div>
+                <div class="label-group">
+                    <span class="label">LOCK ON</span>
+                    <div class="fx-paddle" id="paddle-r">
+                        <div class="paddle-lever" onmousedown="paddleDown('paddle-r')" onmouseup="paddleUp('paddle-r')" ondblclick="paddleLock('paddle-r')"></div>
+                    </div>
+                    <span class="label mt-5">ON</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUMN 4: INNER RIGHT (EQ & Filter) -->
+        <div class="channel-strip">
+            <div class="knob-wrapper mt-20">
+                <span class="label">TRIM</span>
+                <div class="knob-bg detent"><div class="knob" id="trim-2" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+9</span></div>
+            </div>
+            
+            <div class="knob-wrapper mt-10">
+                <span class="label">HI</span>
+                <div class="knob-bg detent"><div class="knob" id="eq-hi-2" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+6</span></div>
+            </div>
+            <div class="knob-wrapper mt-5">
+                <span class="label">MID</span>
+                <div class="knob-bg detent"><div class="knob" id="eq-mid-2" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+6</span></div>
+            </div>
+            <div class="knob-wrapper mt-5">
+                <span class="label">LOW</span>
+                <div class="knob-bg detent"><div class="knob" id="eq-low-2" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>-∞</span><span>+6</span></div>
+            </div>
+
+            <div class="knob-wrapper mt-10">
+                <span class="label">FILTER</span>
+                <div class="knob-bg filter detent"><div class="knob" id="filter-2" data-val="0"><div class="knob-pointer"></div></div></div>
+                <div class="scale-marks"><span>LPF</span><span>HPF</span></div>
+            </div>
+        </div>
+
+        <!-- COLUMN 5: FAR RIGHT (Browse, Loop, FX) -->
+        <div class="channel-strip">
+            <div class="flex-row w-full" style="justify-content: space-around;">
+                <div class="label-group">
+                    <span class="label">LINE &nbsp; PHONO</span>
+                    <div class="btn-rect" style="padding: 2px 8px; font-size: 8px;">A &nbsp; B</div>
+                </div>
+            </div>
+
+            <div class="knob-wrapper mt-10" onclick="switchTab(3)">
+                <span class="label">BROWSE</span>
+                <div class="knob-bg"><div class="knob large" data-val="0"><div class="knob-pointer"></div></div></div>
+                <span class="label-sub">- INST. DOUBLES</span>
+            </div>
+
+            <div class="flex-row w-full mt-5" style="justify-content: space-between;">
+                <div class="label-group" style="flex: 1;">
+                    <div class="btn-rect w-full" style="padding: 4px 0;" onclick="togglePlay(2)" id="play-btn-2">BACK</div>
+                    <span class="label-sub shift-box">VIEW</span>
+                </div>
+                <div class="label-group" style="flex: 1;">
+                    <div class="btn-rect w-full" style="padding: 4px 0;" onclick="document.getElementById('file-upload-2').click()">LOAD</div>
+                    <span class="label-sub shift-box">PREPARE</span>
+                </div>
+            </div>
+
+            <fieldset class="hardware-box">
+                <legend>LOOP</legend>
+                
+                <div class="label-group w-full mt-5">
+                    <div class="btn-rect btn-orange w-full" id="loop-active-2" onclick="toggleLoop(2)">AUTO LOOP</div>
+                    <span class="label-sub shift-box">ACTIVE</span>
+                </div>
+
+                <div class="flex-row w-full mt-10" style="justify-content: space-between;">
+                    <div class="label-group" style="flex: 1;">
+                        <div class="btn-rect btn-orange w-full" style="padding: 4px 0;" onclick="handleLoopInHalf(2)">1/2X</div>
+                        <span class="label-sub shift-box">IN</span>
+                    </div>
+                    <div class="label-group" style="flex: 1;">
+                        <div class="btn-rect btn-orange w-full" style="padding: 4px 0;" onclick="handleLoopOutDouble(2)">2X</div>
+                        <span class="label-sub shift-box">OUT</span>
+                    </div>
+                </div>
+            </fieldset>
+
+            <div class="label-group w-full mt-10">
+                <span class="label" style="color: var(--accent-blue);">SOFTWARE FX SELECT</span>
+                <div class="fx-btn-grid">
+                    <div class="fx-btn active" onclick="toggleFx(this)">FX 1</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">FX 2</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">FX 3</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">FX 4</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">FX 5</div>
+                    <div class="fx-btn" onclick="toggleFx(this)">FX 6</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- BOTTOM SECTION -->
+    <div class="mixer-bottom">
+        <!-- LEFT PADS & SAMPLER -->
+        <div class="channel-strip" style="align-items: stretch; padding-right: 15px;">
+            <!-- Parameter Buttons -->
+            <div class="flex-row w-full mt-10" style="justify-content: space-between; align-items: flex-start;">
+                <div class="label-group" style="align-items: flex-start;">
+                    <span class="label" style="font-size: 9px; color: #ccc;">PARAMETER 1</span>
+                    <span class="label-sub" style="background: transparent; color: #666; padding: 0; margin-top: 6px; font-size: 7px; letter-spacing: 0;">◄ PARAMETER 2 ►</span>
+                </div>
+                <div class="flex-row" style="gap: 4px;">
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">◀</div>
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">▶</div>
+                </div>
+            </div>
+
+            <div class="pad-modes">
+                <div class="mode-btn active" onclick="activatePadMode(1, 'HOT_CUE', this)">
+                    <div style="color: var(--accent-yellow);">HOT CUE</div>
+                    <div class="sub">PITCH PLAY</div>
+                </div>
+                <div class="mode-btn" onclick="activatePadMode(1, 'ROLL', this)">
+                    <div style="color: #00ffff;">ROLL</div>
+                    <div class="sub">SLICER LOOP</div>
+                </div>
+                <div class="mode-btn" onclick="activatePadMode(1, 'SLICER', this)">
+                    <div style="color: var(--accent-blue);">SLICER</div>
+                    <div class="sub">SLICE DETECT</div>
+                </div>
+                <div class="mode-btn" onclick="activatePadMode(1, 'SAMPLER', this)">
+                    <div style="color: var(--accent-red);">SAMPLER</div>
+                    <div class="sub">SCRATCH BANK</div>
+                </div>
+            </div>
+            <div class="pad-grid" id="pads-left">
+                <!-- Generated by JS -->
+            </div>
+            
+            <div class="flex-row mt-20" style="justify-content: space-between; align-items: center;">
+                <div class="knob-wrapper">
+                    <span class="label">SAMPLER VOL</span>
+                    <div class="knob-bg" style="width:36px; height:36px;"><div class="knob" style="width:24px; height:24px;" data-val="-135"><div class="knob-pointer"></div></div></div>
+                </div>
+                <div class="label-group">
+                    <span class="label" style="color: var(--accent-blue);">SMOOTH ECHO</span>
+                    <div class="btn-rect btn-blue" style="padding: 4px 12px; font-size: 8px;" onclick="this.classList.toggle('active')">ON</div>
+                    <span class="label-sub mt-5">SAMPLER/FS<br>MIC UP</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- FADER CORE & VU METERS -->
+        <div class="fader-core-container">
+            <div class="faders-and-meters">
+                <!-- Line Fader L -->
+                <div class="fader-section">
+                    <div class="fader-track-container">
+                        <div class="fader-ticks left">
+                            <div class="tick major"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                            <div class="tick major"></div>
+                            <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick major"></div>
+                        </div>
+                        <div class="fader-slot"></div>
+                        <div class="fader-ticks right">
+                            <div class="tick major"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                            <div class="tick major"></div>
+                            <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick major"></div>
+                        </div>
+                        <div class="fader-cap" id="fader-ch1" style="top: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Center VU Meters -->
+                <div class="vu-meter-group" style="flex-direction: column; gap: 5px; padding: 10px 12px;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; font-size: 8px; color: #777; font-weight: bold; padding: 0 2px;">
+                        <span>CH 1</span>
+                        <div style="display: flex; flex-direction: column; align-items: center; line-height: 1;">
+                            <span style="color: #aaa;">MASTER</span>
+                            <span style="color: red; font-size: 7px; margin-top: 3px;">CLIP</span>
+                        </div>
+                        <span>CH 2</span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px; justify-content: center; height: 100%; width: 100%;">
+                        <div class="vu-channel" id="vu-l"></div>
+                        
+                        <div class="flex-row" style="gap: 4px; margin: 0 4px;">
+                            <div class="vu-channel" id="vu-master-l"></div>
+                            <div style="display: flex; flex-direction: column-reverse; justify-content: space-between; font-size: 5px; color: #666; font-weight: bold; padding: 1px 0;">
+                                <span>-24</span><span>-15</span><span>-6</span><span>-3</span><span>0</span><span>3</span><span>6</span><span>9</span><span>12</span>
+                            </div>
+                            <div class="vu-channel" id="vu-master-r"></div>
+                        </div>
+                        
+                        <div class="vu-channel" id="vu-r"></div>
+                    </div>
+                </div>
+
+                <!-- Line Fader R -->
+                <div class="fader-section">
+                    <div class="fader-track-container">
+                        <div class="fader-ticks left">
+                            <div class="tick major"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                            <div class="tick major"></div>
+                            <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick major"></div>
+                        </div>
+                        <div class="fader-slot"></div>
+                        <div class="fader-ticks right">
+                            <div class="tick major"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                            <div class="tick major"></div>
+                            <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick major"></div>
+                        </div>
+                        <div class="fader-cap" id="fader-ch2" style="top: 100%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Crossfader -->
+            <div class="crossfader-container">
+                <div class="crossfader-slot">
+                    <div class="cf-ticks">
+                        <div class="cf-tick major"></div>
+                        <div class="cf-tick"></div><div class="cf-tick"></div><div class="cf-tick"></div>
+                        <div class="cf-tick major"></div>
+                        <div class="cf-tick"></div><div class="cf-tick"></div><div class="cf-tick"></div>
+                        <div class="cf-tick major"></div>
+                    </div>
+                    <div class="crossfader-cap" id="crossfader" style="left: 50%;"></div>
+                </div>
+            </div>
+            <span class="label" style="margin-top: 5px;">MAGVEL FADER PRO</span>
+        </div>
+
+        <!-- RIGHT PADS & HEADPHONES -->
+        <div class="channel-strip" style="align-items: stretch; padding-left: 15px;">
+             <!-- Parameter Buttons -->
+             <div class="flex-row w-full mt-10" style="justify-content: space-between; align-items: flex-start;">
+                <div class="label-group" style="align-items: flex-start;">
+                    <span class="label" style="font-size: 9px; color: #ccc;">PARAMETER 1</span>
+                    <span class="label-sub" style="background: transparent; color: #666; padding: 0; margin-top: 6px; font-size: 7px; letter-spacing: 0;">◄ PARAMETER 2 ►</span>
+                </div>
+                <div class="flex-row" style="gap: 4px;">
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">◀</div>
+                    <div class="btn-rect" style="padding: 4px 10px; font-size: 10px;">▶</div>
+                </div>
+            </div>
+
+             <div class="pad-modes">
+                <div class="mode-btn active" onclick="activatePadMode(2, 'HOT_CUE', this)">
+                    <div style="color: var(--accent-yellow);">HOT CUE</div>
+                    <div class="sub">PITCH PLAY</div>
+                </div>
+                <div class="mode-btn" onclick="activatePadMode(2, 'ROLL', this)">
+                    <div style="color: #00ffff;">ROLL</div>
+                    <div class="sub">SLICER LOOP</div>
+                </div>
+                <div class="mode-btn" onclick="activatePadMode(2, 'SLICER', this)">
+                    <div style="color: var(--accent-blue);">SLICER</div>
+                    <div class="sub">SLICE DETECT</div>
+                </div>
+                <div class="mode-btn" onclick="activatePadMode(2, 'SAMPLER', this)">
+                    <div style="color: var(--accent-red);">SAMPLER</div>
+                    <div class="sub">SCRATCH BANK</div>
+                </div>
+            </div>
+            <div class="pad-grid" id="pads-right">
+                <!-- Generated by JS -->
+            </div>
+
+            <div class="flex-row mt-20" style="justify-content: flex-end; gap: 30px;">
+                <div class="label-group">
+                    <span class="label">🎧 LEVEL</span>
+                    <div class="knob-bg" style="width:36px; height:36px;"><div class="knob" style="width:24px; height:24px;" data-val="-135"><div class="knob-pointer"></div></div></div>
+                </div>
+                <div class="label-group">
+                    <span class="label">🎧 MIXING</span>
+                    <div class="knob-bg detent" style="width:36px; height:36px;"><div class="knob" style="width:24px; height:24px;" data-val="0"><div class="knob-pointer"></div></div></div>
+                    <div class="scale-marks" style="width: 40px;"><span>CUE</span><span>MST</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FRONT PANEL -->
+<div class="mixer mixer-panel" id="panel-front" style="padding: 40px; background: #131313; align-items: center; justify-content: space-between; flex-direction: row; border-top: 4px solid #000; border-bottom: 8px solid #0a0a0a; border-radius: 4px;">
+    <div style="width: 20px; height: 160px; background: #0a0a0a; border-radius: 5px; box-shadow: inset 0 0 10px #000;"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; flex: 1; margin: 0 30px;">
+        <!-- Top Row -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <!-- MIC Top -->
+            <div style="border-top: 2px solid #ddd; padding-top: 15px; position: relative; display: flex; gap: 25px; flex: 1;">
+                <div style="position: absolute; top: -10px; left: 20px; background: #131313; padding: 0 10px; color: #fff; font-size: 10px; font-weight: bold;">MIC</div>
+                <div class="label-group">
+                    <span class="label">ON</span>
+                    <div class="metal-switch" onclick="this.classList.toggle('on')"><div class="lever"></div></div>
+                    <span class="label mt-10">OFF</span>
+                </div>
+                <div class="label-group">
+                    <span class="label">ECHO ON</span>
+                    <div class="slider-switch" onclick="this.classList.toggle('on')"><div class="slider-knob"></div></div>
+                    <span class="label mt-10">OFF</span>
+                </div>
+                <div class="knob-wrapper">
+                    <span class="label">EQ HI</span>
+                    <div class="knob-bg"><div class="knob" data-val="0"><div class="knob-pointer"></div></div></div>
+                </div>
+                <div class="knob-wrapper">
+                    <span class="label">ECHO</span>
+                    <div class="knob-bg"><div class="knob" data-val="-135"><div class="knob-pointer"></div></div></div>
+                </div>
+            </div>
+
+            <!-- CROSSFADER -->
+            <div style="border-top: 2px solid #ddd; padding-top: 15px; position: relative; display: flex; gap: 25px; flex: 1; justify-content: flex-end;">
+                 <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #131313; padding: 0 10px; color: #fff; font-size: 10px; font-weight: bold;">CROSSFADER</div>
+                 <div class="knob-wrapper">
+                     <span class="label">FEELING<br>ADJUST</span>
+                     <div class="knob-bg detent"><div class="knob" data-val="0"><div class="knob-pointer"></div></div></div>
+                 </div>
+                 <div class="label-group">
+                    <span class="label">REVERSE</span>
+                    <span class="label" style="font-size: 8px;">ON</span>
+                    <div class="slider-switch" onclick="toggleCfReverse(this)"><div class="slider-knob"></div></div>
+                    <span class="label mt-5">OFF</span>
+                </div>
+                <div class="knob-wrapper">
+                     <span class="label">CURVE</span>
+                     <div class="knob-bg detent"><div class="knob" id="cf-curve" data-val="0"><div class="knob-pointer"></div></div></div>
+                     <div class="scale-marks" style="width: 50px;">
+                         <svg width="14" height="10" viewBox="0 0 14 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L13,1 M1,1 L13,9"/></svg>
+                         <svg width="14" height="10" viewBox="0 0 14 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 Q7,1 13,1 M1,1 Q7,9 13,9"/></svg>
+                         <svg width="14" height="10" viewBox="0 0 14 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L3,1 L11,1 L13,9 M1,1 L3,9 L11,9 L13,1"/></svg>
+                     </div>
+                 </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <!-- MIC Bottom + AUX -->
+            <div style="display: flex; gap: 25px; flex: 1; padding-left: 110px;">
+                <div class="knob-wrapper">
+                    <span class="label">LEVEL</span>
+                    <div class="knob-bg"><div class="knob" data-val="-135"><div class="knob-pointer"></div></div></div>
+                </div>
+                <div class="knob-wrapper">
+                    <span class="label">EQ LOW</span>
+                    <div class="knob-bg"><div class="knob" data-val="0"><div class="knob-pointer"></div></div></div>
+                </div>
+                <div style="border-top: 2px solid #ddd; padding-top: 15px; position: relative; display: flex; margin-left: 20px;">
+                     <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #131313; padding: 0 10px; color: #fff; font-size: 10px; font-weight: bold;">AUX</div>
+                     <div class="knob-wrapper">
+                         <span class="label">LEVEL</span>
+                         <div class="knob-bg"><div class="knob" data-val="-135"><div class="knob-pointer"></div></div></div>
+                     </div>
+                </div>
+            </div>
+
+            <!-- CH CURVES -->
+            <div style="display: flex; gap: 20px; flex: 1; justify-content: flex-end;">
+                 <div style="border-top: 2px solid #ddd; padding-top: 15px; position: relative; display: flex; gap: 15px;">
+                     <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #131313; padding: 0 10px; color: #fff; font-size: 10px; font-weight: bold; white-space: nowrap;">CH 1 CURVE</div>
+                     <div class="knob-wrapper">
+                         <span class="label">&nbsp;</span>
+                         <div class="knob-bg detent"><div class="knob" data-val="0"><div class="knob-pointer"></div></div></div>
+                         <div class="scale-marks" style="width: 45px;">
+                             <svg width="12" height="10" viewBox="0 0 12 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L9,9 L11,1"/></svg>
+                             <svg width="12" height="10" viewBox="0 0 12 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L11,1"/></svg>
+                             <svg width="12" height="10" viewBox="0 0 12 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L3,1 L11,1"/></svg>
+                         </div>
+                     </div>
+                     <div class="label-group">
+                        <span class="label">REVERSE</span>
+                        <span class="label" style="font-size: 8px;">ON</span>
+                        <div class="slider-switch" onclick="toggleChReverse(1, this)"><div class="slider-knob"></div></div>
+                        <span class="label mt-5">OFF</span>
+                    </div>
+                 </div>
+                 <div style="border-top: 2px solid #ddd; padding-top: 15px; position: relative; display: flex; gap: 15px;">
+                     <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #131313; padding: 0 10px; color: #fff; font-size: 10px; font-weight: bold; white-space: nowrap;">CH 2 CURVE</div>
+                     <div class="label-group">
+                        <span class="label">REVERSE</span>
+                        <span class="label" style="font-size: 8px;">ON</span>
+                        <div class="slider-switch" onclick="toggleChReverse(2, this)"><div class="slider-knob"></div></div>
+                        <span class="label mt-5">OFF</span>
+                    </div>
+                     <div class="knob-wrapper">
+                         <span class="label">&nbsp;</span>
+                         <div class="knob-bg detent"><div class="knob" data-val="0"><div class="knob-pointer"></div></div></div>
+                         <div class="scale-marks" style="width: 45px;">
+                             <svg width="12" height="10" viewBox="0 0 12 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L9,9 L11,1"/></svg>
+                             <svg width="12" height="10" viewBox="0 0 12 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L11,1"/></svg>
+                             <svg width="12" height="10" viewBox="0 0 12 10" style="stroke: #aaa; stroke-width: 1.5; fill: none; stroke-linejoin: round;"><path d="M1,9 L3,1 L11,1"/></svg>
+                         </div>
+                     </div>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; height: 160px; justify-content: center; border-left: 1px solid #333; padding-left: 20px;">
+        <span class="label">PHONES</span>
+        <div class="jack-quarter"></div>
+        <div style="width: 2px; height: 15px; background: #fff;"></div>
+        <div class="jack-eighth"></div>
+    </div>
+
+    <div style="width: 20px; height: 160px; background: #0a0a0a; border-radius: 5px; box-shadow: inset 0 0 10px #000;"></div>
+</div>
+
+<!-- REAR PANEL -->
+<div class="mixer mixer-panel" id="panel-rear" style="padding: 30px; background: #111; border: 1px solid #333; gap: 15px; flex-direction: row; align-items: center; justify-content: space-between; border-radius: 4px;">
+    <!-- Column 1: Power -->
+    <div class="flex-column" style="gap: 20px; align-items: flex-start; border-right: 1px solid #333; padding-right: 15px;">
+        <div class="flex-row" style="gap: 10px; align-items: center;">
+            <div class="label-group" style="align-items: flex-start;">
+                <span class="label" style="font-size: 8px;">OFF</span>
+                <div style="width: 24px; height: 32px; background: #000; border: 2px solid #222; box-shadow: 0 0 5px rgba(0,0,0,0.5); position: relative;">
+                    <div style="position: absolute; bottom: 0; width: 100%; height: 50%; background: #2a2a2a; border-top: 1px solid #555;"></div>
+                </div>
+                <span class="label" style="font-size: 8px;">ON</span>
+            </div>
+            <div style="width: 16px; height: 16px; border: 1px solid #333; border-radius: 2px;"></div>
+        </div>
+        <div class="label-group" style="align-items: flex-start;">
+            <span class="label">AC IN</span>
+            <div class="ac-in"><div class="ac-prong"></div><div class="ac-prong"></div><div class="ac-prong"></div></div>
+        </div>
+    </div>
+
+    <!-- Column 2: CH 2 & Master 2 -->
+    <div class="flex-column" style="gap: 10px;">
+        <div style="display: flex; justify-content: flex-end; padding-right: 10px; margin-bottom: -10px; z-index: 2;">
+             <div class="flex-column" style="align-items: center; gap: 2px;">
+                <span class="label" style="font-size: 7px; text-shadow: 1px 1px 0 #000;">SIGNAL<br>GND</span>
+                <div style="width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle, #ddd, #999); border: 1px solid #555; box-shadow: 0 2px 4px rgba(0,0,0,0.8);"></div>
+             </div>
+        </div>
+        <div style="border: 1px solid #fff; padding: 5px; background: #000; margin-top: 5px;">
+            <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: 5px;">CH 2</div>
+            <div class="flex-row" style="gap: 15px;">
+                <div class="flex-column" style="align-items: center; gap: 5px;">
+                    <span style="color: #fff; font-size: 8px;">PHONO</span>
+                    <div class="rca-jack white"><div class="rca-inner"></div></div>
+                    <div class="rca-jack red"><div class="rca-inner"></div></div>
+                </div>
+                <div class="flex-column" style="align-items: center; gap: 5px;">
+                    <span style="color: #fff; font-size: 8px;">LINE</span>
+                    <div class="rca-jack white"><div class="rca-inner"></div></div>
+                    <div class="rca-jack red"><div class="rca-inner"></div></div>
+                </div>
+            </div>
+        </div>
+        <div style="border: 1px solid #fff; padding: 5px; background: #000;">
+            <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: 5px;">MASTER 2</div>
+            <div class="flex-row" style="justify-content: space-around;">
+                <div class="rca-jack red"><div class="rca-inner"></div></div>
+                <div class="rca-jack white"><div class="rca-inner"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column 3: CDJ & Master 1 -->
+    <div class="flex-column" style="gap: 10px;">
+        <div style="border: 1px solid #fff; padding: 5px; background: #000; display: flex; flex-direction: column; align-items: center;">
+             <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; width: 100%; margin-bottom: 5px;">CDJ/CONTROLLER</div>
+             <div class="flex-row" style="gap: 20px; align-items: center; padding: 5px;">
+                 <div class="usb-a"></div><span style="color: #fff; font-size: 8px;">5V</span><div class="usb-a"></div>
+             </div>
+        </div>
+        <div style="border: 1px solid #fff; padding: 5px; background: #000;">
+             <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: 5px;">MASTER 1</div>
+             <div class="flex-row" style="justify-content: space-around; padding: 5px; gap: 10px;">
+                 <div class="xlr-jack"><div class="xlr-pin"></div><div class="xlr-pin"></div><div class="xlr-pin"></div></div>
+                 <div class="xlr-jack"><div class="xlr-pin"></div><div class="xlr-pin"></div><div class="xlr-pin"></div></div>
+             </div>
+        </div>
+    </div>
+
+    <!-- Column 4: CH 1 & Booth -->
+    <div class="flex-column" style="gap: 10px;">
+        <div style="display: flex; justify-content: flex-end; padding-right: 10px; margin-bottom: -10px; z-index: 2;">
+             <div class="flex-column" style="align-items: center; gap: 2px;">
+                <span class="label" style="font-size: 7px; text-shadow: 1px 1px 0 #000;">SIGNAL<br>GND</span>
+                <div style="width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle, #ddd, #999); border: 1px solid #555; box-shadow: 0 2px 4px rgba(0,0,0,0.8);"></div>
+             </div>
+        </div>
+        <div style="border: 1px solid #fff; padding: 5px; background: #000; margin-top: 5px;">
+            <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: 5px;">CH 1</div>
+            <div class="flex-row" style="gap: 15px;">
+                <div class="flex-column" style="align-items: center; gap: 5px;">
+                    <span style="color: #fff; font-size: 8px;">PHONO</span>
+                    <div class="rca-jack white"><div class="rca-inner"></div></div>
+                    <div class="rca-jack red"><div class="rca-inner"></div></div>
+                </div>
+                <div class="flex-column" style="align-items: center; gap: 5px;">
+                    <span style="color: #fff; font-size: 8px;">LINE</span>
+                    <div class="rca-jack white"><div class="rca-inner"></div></div>
+                    <div class="rca-jack red"><div class="rca-inner"></div></div>
+                </div>
+            </div>
+        </div>
+        <div style="border: 1px solid #fff; padding: 5px; background: #000;">
+             <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: 5px;">BOOTH</div>
+             <div class="flex-row" style="justify-content: space-around; padding: 5px; gap: 10px;">
+                 <div class="jack-quarter" style="border-color:#ccc; background:#222;"></div>
+                 <div class="jack-quarter" style="border-color:#ccc; background:#222;"></div>
+             </div>
+        </div>
+    </div>
+
+    <!-- Column 5: MIC, AUX, USB -->
+    <div class="flex-column" style="gap: 10px;">
+        <div class="flex-row" style="gap: 10px;">
+            <div style="border: 1px solid #fff; padding: 5px; background: #000; display: flex; flex-direction: column; align-items: center;">
+                <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; width: 100%; margin-bottom: 5px;">MIC</div>
+                <div class="xlr-jack" style="width: 40px; height: 40px;"><div class="xlr-pin"></div><div class="xlr-pin"></div><div class="xlr-pin"></div></div>
+            </div>
+            <div style="border: 1px solid #fff; padding: 5px; background: #000; display: flex; flex-direction: column; align-items: center;">
+                <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; width: 100%; margin-bottom: 5px;">AUX</div>
+                <div class="rca-jack white"><div class="rca-inner"></div></div>
+                <div class="rca-jack red" style="margin-top: 5px;"><div class="rca-inner"></div></div>
+            </div>
+        </div>
+        <div style="border: 1px solid #fff; padding: 5px; background: #000;">
+             <div style="text-align: center; color: #fff; font-size: 10px; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: 5px;">USB</div>
+             <div class="flex-row" style="gap: 20px; align-items: center; padding: 5px;">
+                 <div class="usb-b"></div><span style="color: #fff; font-size: 12px; font-weight: bold;">B &nbsp; A</span><div class="usb-b"></div>
+             </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- VIEW CONTROLLER ---
+    function switchView(viewName) {
+        document.querySelectorAll('.mixer-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.view-selector .btn-rect').forEach(b => b.classList.remove('active'));
+        
+        document.getElementById('panel-' + viewName).classList.add('active');
+        document.getElementById('btn-' + viewName).classList.add('active');
+    }
+
+    // --- FRONT PANEL LOGIC STATE ---
+    let cfReverse = false;
+    let ch1Reverse = false;
+    let ch2Reverse = false;
+    let isShiftDown = false;
+
+    function toggleShift() {
+        isShiftDown = !isShiftDown;
+        document.getElementById('shift-btn').classList.toggle('active', isShiftDown);
+    }
+
+    function toggleCfReverse(el) {
+        el.classList.toggle('on');
+        cfReverse = el.classList.contains('on');
+        syncAllControls();
+    }
+    
+    function toggleChReverse(chNum, el) {
+        el.classList.toggle('on');
+        if(chNum === 1) ch1Reverse = el.classList.contains('on');
+        if(chNum === 2) ch2Reverse = el.classList.contains('on');
+        syncAllControls();
+    }
+
+    // --- AUDIO ENGINE ---
+    let audioCtx;
+    let currentBeatFX = 'ECHO';
+    const decks = [null, null];
+    const master = { gain: null, analyser: null };
+    const samplerBuffers = [];
+
+    function initAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Master
+        master.gain = audioCtx.createGain();
+        master.analyser = audioCtx.createAnalyser();
+        master.analyser.fftSize = 256;
+        master.gain.connect(master.analyser);
+        master.analyser.connect(audioCtx.destination);
+
+        // Decks
+        decks[0] = setupDeck('audio-deck1');
+        decks[1] = setupDeck('audio-deck2');
+
+        // Initial sync of DOM state
+        generateSamplerSounds();
+        syncAllControls();
+        startMetering();
+    }
+
+    // Synthesize some basic built-in sampler sounds
+    function generateSamplerSounds() {
+        if (!audioCtx) return;
+        for(let i=0; i<8; i++) {
+            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+            const data = buf.getChannelData(0);
+            for(let j=0; j<data.length; j++) {
+                const t = j / audioCtx.sampleRate;
+                if (i===0) data[j] = Math.sin(2*Math.PI * 50 * Math.exp(-t*15)) * Math.exp(-t*10); // Kick
+                else if (i===1) data[j] = (Math.random()*2-1) * Math.exp(-t*20); // Snare/Hat
+                else data[j] = Math.sin(2*Math.PI * (100 + i*50) * t) * Math.exp(-t*5); // Synth Blip
+            }
+            samplerBuffers.push(buf);
+        }
+    }
+
+    function setupDeck(audioId) {
+        const audioEl = document.getElementById(audioId);
+        const source = audioCtx.createMediaElementSource(audioEl);
+        
+        const trim = audioCtx.createGain();
+        const eqHi = audioCtx.createBiquadFilter(); eqHi.type = 'highshelf'; eqHi.frequency.value = 4000;
+        const eqMid = audioCtx.createBiquadFilter(); eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 1.0;
+        const eqLow = audioCtx.createBiquadFilter(); eqLow.type = 'lowshelf'; eqLow.frequency.value = 250;
+        const filterLP = audioCtx.createBiquadFilter(); filterLP.type = 'lowpass'; filterLP.frequency.value = 22000;
+        const filterHP = audioCtx.createBiquadFilter(); filterHP.type = 'highpass'; filterHP.frequency.value = 10;
+        const lineFader = audioCtx.createGain(); lineFader.gain.value = 0;
+        const crossFader = audioCtx.createGain();
+        const analyser = audioCtx.createAnalyser(); analyser.fftSize = 256;
+
+        // --- MULTI-FX ENGINE ---
+        const fxDryGain = audioCtx.createGain(); fxDryGain.gain.value = 1.0;
+        const fxWetGain = audioCtx.createGain(); fxWetGain.gain.value = 0;
+        
+        // 1. ECHO
+        const echoInput = audioCtx.createGain(); echoInput.gain.value = 1.0;
+        const fxDelay = audioCtx.createDelay(5.0); fxDelay.delayTime.value = 0.5;
+        const fxFeedback = audioCtx.createGain(); fxFeedback.gain.value = 0.5;
+        lineFader.connect(echoInput).connect(fxDelay);
+        fxDelay.connect(fxFeedback).connect(fxDelay);
+        fxDelay.connect(fxWetGain);
+
+        // 2. REVERB
+        const reverbInput = audioCtx.createGain(); reverbInput.gain.value = 0.0;
+        const reverb = audioCtx.createConvolver();
+        const irLen = audioCtx.sampleRate * 2.0;
+        const irBuf = audioCtx.createBuffer(2, irLen, audioCtx.sampleRate);
+        for (let c = 0; c < 2; c++) {
+            const data = irBuf.getChannelData(c);
+            // Generate synthetic impulse response
+            for (let i = 0; i < irLen; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 3);
+        }
+        reverb.buffer = irBuf;
+        lineFader.connect(reverbInput).connect(reverb).connect(fxWetGain);
+
+        // 3. FLANGER
+        const flangerInput = audioCtx.createGain(); flangerInput.gain.value = 0.0;
+        const flangerDelay = audioCtx.createDelay(1.0); flangerDelay.delayTime.value = 0.005;
+        const flangerLFO = audioCtx.createOscillator(); flangerLFO.type = 'sine'; flangerLFO.frequency.value = 0.5;
+        const flangerDepth = audioCtx.createGain(); flangerDepth.gain.value = 0.003;
+        flangerLFO.connect(flangerDepth).connect(flangerDelay.delayTime);
+        flangerLFO.start();
+        const flangerFB = audioCtx.createGain(); flangerFB.gain.value = 0.7;
+        flangerDelay.connect(flangerFB).connect(flangerDelay);
+        lineFader.connect(flangerInput).connect(flangerDelay).connect(fxWetGain);
+
+        // Routing: Channel -> FX Send/Return -> Crossfader
+        source.connect(trim).connect(eqHi).connect(eqMid).connect(eqLow).connect(filterLP).connect(filterHP).connect(lineFader);
+        
+        lineFader.connect(fxDryGain).connect(crossFader);
+        fxWetGain.connect(crossFader);
+        
+        crossFader.connect(master.gain);
+        filterHP.connect(analyser); // Pre-fader metering
+
+        return { 
+            audioEl, trim, eqHi, eqMid, eqLow, filterLP, filterHP, lineFader, crossFader, analyser,
+            fx: { 
+                delay: fxDelay, feedback: fxFeedback, wet: fxWetGain, dry: fxDryGain, 
+                echoInput, reverbInput, flangerInput,
+                on: false, amount: 0 
+            },
+            loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null,
+            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0
+        };
+    }
+
+    function loadTrack(deckNum, file) {
+        if (!file) return;
+        initAudio();
+        audioCtx.resume();
+        const url = URL.createObjectURL(file);
+        const deck = decks[deckNum - 1];
+        deck.audioEl.src = url;
+        
+        // Reset loop & playback state
+        deck.loopIn = null;
+        deck.loopOut = null;
+        deck.loopActive = false;
+        deck.duration = 0;
+        deck.peaks = null;
+        document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
+        updateLoopUI(deckNum);
+        
+        // Render Waveform
+        decodeWaveform(file, deckNum);
+        
+        // Reset play button
+        const btn = document.getElementById(`play-btn-${deckNum}`);
+        btn.classList.remove('active');
+        btn.innerText = '▶ PLAY';
+    }
+
+    function togglePlay(deckNum) {
+        initAudio();
+        audioCtx.resume();
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.audioEl.src) return;
+        
+        const btn = document.getElementById(`play-btn-${deckNum}`);
+        if (deck.audioEl.paused) {
+            deck.audioEl.play();
+            btn.classList.add('active');
+            btn.innerText = '⏸ PAUSE';
+        } else {
+            deck.audioEl.pause();
+            btn.classList.remove('active');
+            btn.innerText = '▶ PLAY';
+        }
+    }
+
+    function mapEQ(val) { return val < 0 ? (val / 135) * 40 : (val / 135) * 6; }
+
+    function updateFilter(deck, val) {
+        if (val === 0) {
+            deck.filterLP.frequency.value = 22000;
+            deck.filterHP.frequency.value = 10;
+        } else if (val < 0) {
+            deck.filterHP.frequency.value = 10;
+            deck.filterLP.frequency.value = 50 * Math.pow(22000/50, 1 - Math.abs(val) / 135);
+        } else {
+            deck.filterLP.frequency.value = 22000;
+            deck.filterHP.frequency.value = 10 * Math.pow(10000/10, val / 135);
+        }
+    }
+
+    function updateAudioParam(id, val) {
+        if (!audioCtx || !id) return;
+        const normalized = (val + 135) / 270; // 0.0 to 1.0
+        
+        if (id === 'trim-1') decks[0].trim.gain.value = normalized * 2;
+        if (id === 'trim-2') decks[1].trim.gain.value = normalized * 2;
+        if (id === 'eq-hi-1') decks[0].eqHi.gain.value = mapEQ(val);
+        if (id === 'eq-hi-2') decks[1].eqHi.gain.value = mapEQ(val);
+        if (id === 'eq-mid-1') decks[0].eqMid.gain.value = mapEQ(val);
+        if (id === 'eq-mid-2') decks[1].eqMid.gain.value = mapEQ(val);
+        if (id === 'eq-low-1') decks[0].eqLow.gain.value = mapEQ(val);
+        if (id === 'eq-low-2') decks[1].eqLow.gain.value = mapEQ(val);
+        if (id === 'filter-1') updateFilter(decks[0], val);
+        if (id === 'filter-2') updateFilter(decks[1], val);
+        if (id === 'master-level') master.gain.gain.value = normalized * 2;
+        
+        if (id === 'fx-level') {
+            decks[0].fx.amount = normalized;
+            decks[1].fx.amount = normalized;
+            applyFXState(1);
+            applyFXState(2);
+        }
+        
+        if (id === 'cf-curve') {
+            const cap = document.getElementById('crossfader');
+            if(cap) {
+                let percent = parseFloat(cap.style.left) || 50;
+                updateFaderAudio('crossfader', percent);
+            }
+        }
+    }
+
+    function updateFaderAudio(faderId, percent) {
+        if (!audioCtx) return;
+        
+        // Reverse logic
+        let effectivePercent = percent;
+        if (faderId === 'fader-ch1' && ch1Reverse) effectivePercent = 100 - percent;
+        if (faderId === 'fader-ch2' && ch2Reverse) effectivePercent = 100 - percent;
+        
+        const val = 1 - (effectivePercent / 100); // 1.0 top, 0.0 bottom
+        
+        if (faderId === 'fader-ch1') decks[0].lineFader.gain.value = Math.pow(val, 2);
+        if (faderId === 'fader-ch2') decks[1].lineFader.gain.value = Math.pow(val, 2);
+        
+        if (faderId === 'crossfader') {
+            let x = percent / 100; // 0 left, 1 right
+            if (cfReverse) x = 1.0 - x;
+            
+            // Apply Front Panel Curve Knob state
+            const curveKnob = document.getElementById('cf-curve');
+            const curveVal = curveKnob ? parseFloat(curveKnob.getAttribute('data-val')) : 0;
+            
+            if (curveVal > 50) {
+                // Sharp Cut Curve
+                decks[0].crossFader.gain.value = x < 0.95 ? 1 : 0;
+                decks[1].crossFader.gain.value = x > 0.05 ? 1 : 0;
+            } else if (curveVal < -50) {
+                // Linear curve
+                decks[0].crossFader.gain.value = 1.0 - x;
+                decks[1].crossFader.gain.value = x;
+            } else {
+                // Default equal power
+                decks[0].crossFader.gain.value = Math.cos(x * 0.5 * Math.PI);
+                decks[1].crossFader.gain.value = Math.cos((1.0 - x) * 0.5 * Math.PI);
+            }
+        }
+    }
+
+    function syncAllControls() {
+        // Sync knobs
+        document.querySelectorAll('.knob').forEach(k => {
+            const val = parseFloat(k.getAttribute('data-val')) || 0;
+            k.style.transform = `rotate(${val}deg)`; // Initialize visual rotation
+            updateAudioParam(k.id, val);
+        });
+        // Sync faders
+        ['fader-ch1', 'fader-ch2', 'crossfader'].forEach(id => {
+            const cap = document.getElementById(id);
+            if(cap) {
+                const isHoriz = id === 'crossfader';
+                let percent = 50;
+                if(isHoriz) {
+                    percent = parseFloat(cap.style.left) || 50;
+                } else {
+                    percent = parseFloat(cap.style.top) || 100; // Default off
+                }
+                updateFaderAudio(id, percent);
+            }
+        });
+    }
+
+    // --- KNOB LOGIC ---
+    const knobs = document.querySelectorAll('.knob');
+    let activeKnob = null;
+    let startY = 0;
+    let startVal = 0;
+
+    knobs.forEach(knob => {
+        knob.addEventListener('mousedown', (e) => {
+            activeKnob = knob;
+            startY = e.clientY;
+            startVal = parseFloat(knob.getAttribute('data-val')) || 0;
+            document.body.style.cursor = 'ns-resize';
+        });
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (activeKnob) {
+            const deltaY = startY - e.clientY;
+            let newVal = startVal + (deltaY * 2); 
+            // Clamp value between -135 and 135 degrees
+            newVal = Math.max(-135, Math.min(135, newVal));
+            activeKnob.setAttribute('data-val', newVal);
+            activeKnob.style.transform = `rotate(${newVal}deg)`;
+            updateAudioParam(activeKnob.id, newVal);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (activeKnob) {
+            activeKnob = null;
+            document.body.style.cursor = 'default';
+        }
+    });
+
+    // --- FADER LOGIC ---
+    function setupFader(faderId, isHorizontal = false) {
+        const cap = document.getElementById(faderId);
+        if (!cap) return;
+        
+        const slot = cap.parentElement;
+        let isDragging = false;
+
+        cap.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            document.body.style.cursor = isHorizontal ? 'ew-resize' : 'ns-resize';
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const rect = slot.getBoundingClientRect();
+            
+            if (isHorizontal) {
+                let x = e.clientX - rect.left;
+                let percent = (x / rect.width) * 100;
+                percent = Math.max(0, Math.min(100, percent));
+                cap.style.left = `${percent}%`;
+                updateFaderAudio(faderId, percent);
+            } else {
+                let y = e.clientY - rect.top;
+                let percent = (y / rect.height) * 100;
+                percent = Math.max(0, Math.min(100, percent));
+                cap.style.top = `${percent}%`;
+                updateFaderAudio(faderId, percent);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    setupFader('fader-ch1');
+    setupFader('fader-ch2');
+    setupFader('crossfader', true);
+
+    // --- PAD & PERFORMANCE LOGIC ---
+    const padColors = {
+        'HOT_CUE': ['#00ffff', '#ff00ff', '#ffff00', '#ff0000', '#00ff00', '#0000ff', '#ff8800', '#ffffff'],
+        'ROLL': Array(8).fill('#00ffff'),
+        'SLICER': Array(8).fill('#ff0000'),
+        'SAMPLER': Array(8).fill('#ff00ff')
+    };
+
+    function createPads(deckNum, containerId) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        for (let i = 0; i < 8; i++) {
+            const pad = document.createElement('div');
+            pad.className = 'perf-pad';
+            pad.id = `pad-${deckNum}-${i}`;
+            
+            // Mouse & Touch events
+            const onDown = (e) => { e.preventDefault(); handlePadDown(deckNum, i, pad); };
+            const onUp = (e) => { e.preventDefault(); handlePadUp(deckNum, i, pad); };
+            
+            pad.addEventListener('mousedown', onDown);
+            pad.addEventListener('touchstart', onDown);
+            window.addEventListener('mouseup', onUp);
+            pad.addEventListener('touchend', onUp);
+            
+            container.appendChild(pad);
+        }
+        updatePadLights(deckNum);
+    }
+
+    createPads(1, 'pads-left');
+    createPads(2, 'pads-right');
+
+    function activatePadMode(deckNum, mode, btn) {
+        initAudio();
+        const deck = decks[deckNum - 1];
+        if(!deck) return;
+        deck.padMode = mode;
+        
+        const siblings = btn.parentElement.children;
+        for(let s of siblings) s.classList.remove('active');
+        btn.classList.add('active');
+        
+        updatePadLights(deckNum);
+    }
+
+    function updatePadLights(deckNum) {
+        const deck = decks[deckNum - 1];
+        if(!deck) return;
+        const colors = padColors[deck.padMode];
+
+        for (let i = 0; i < 8; i++) {
+            const pad = document.getElementById(`pad-${deckNum}-${i}`);
+            if(!pad) continue;
+            pad.style.setProperty('--pad-color', colors[i]);
+            
+            // Default dim, bright if active/loaded
+            let isActive = false;
+            if (deck.padMode === 'HOT_CUE' && deck.hotCues[i] !== null) isActive = true;
+            if (deck.padMode === 'ROLL') isActive = true;
+            if (deck.padMode === 'SAMPLER') isActive = true;
+            if (deck.padMode === 'SLICER' && deck.slices[i] !== undefined) isActive = true;
+
+            if(isActive) {
+                pad.style.opacity = '1';
+                pad.style.boxShadow = `inset 0 0 10px ${colors[i]}`;
+            } else {
+                pad.style.opacity = '0.3';
+                pad.style.boxShadow = `inset 0 0 10px rgba(0,0,0,0.8)`;
+            }
+        }
+    }
+
+    const rollTimes = [0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0]; // seconds (assuming ~120bpm)
+
+    function handlePadDown(deckNum, padIdx, padEl) {
+        padEl.classList.add('active');
+        const deck = decks[deckNum - 1];
+        if(!deck) return;
+
+        if (deck.padMode === 'HOT_CUE') {
+            if (deck.hotCues[padIdx] === null) {
+                deck.hotCues[padIdx] = deck.audioEl.currentTime;
+                updatePadLights(deckNum);
+            } else {
+                deck.audioEl.currentTime = deck.hotCues[padIdx];
+            }
+        } 
+        else if (deck.padMode === 'ROLL') {
+            if(!deck.audioBuffer) return;
+            const rollLen = rollTimes[padIdx];
+            playBufferSource(deck, deck.audioEl.currentTime, rollLen, true);
+        }
+        else if (deck.padMode === 'SAMPLER') {
+            if (samplerBuffers[padIdx]) {
+                const src = audioCtx.createBufferSource();
+                src.buffer = samplerBuffers[padIdx];
+                src.connect(master.gain);
+                src.start();
+            }
+        }
+        else if (deck.padMode === 'SLICER') {
+            if(!deck.audioBuffer || deck.slices[padIdx] === undefined) return;
+            const startTime = deck.slices[padIdx];
+            const endTime = deck.slices[padIdx+1] || (startTime + 0.5);
+            playBufferSource(deck, startTime, endTime - startTime, false);
+        }
+    }
+
+    function handlePadUp(deckNum, padIdx, padEl) {
+        padEl.classList.remove('active');
+        const deck = decks[deckNum - 1];
+        if(!deck) return;
+
+        if (deck.padMode === 'ROLL' || deck.padMode === 'SLICER') {
+            if (deck.activeSourceNode) {
+                try { deck.activeSourceNode.stop(); } catch(e){}
+                deck.activeSourceNode = null;
+                // Unmute original fader (Slip mode logic)
+                const faderCap = document.getElementById(`fader-ch${deckNum}`);
+                const percent = parseFloat(faderCap.style.top) || 80;
+                updateFaderAudio(`fader-ch${deckNum}`, percent); 
+            }
+        }
+    }
+
+    function playBufferSource(deck, startTime, duration, loop) {
+        if(deck.activeSourceNode) try { deck.activeSourceNode.stop(); } catch(e){}
+        
+        // Mute standard audio track temporarily
+        deck.lineFader.gain.value = 0;
+
+        const src = audioCtx.createBufferSource();
+        src.buffer = deck.audioBuffer;
+        if (loop) {
+            src.loop = true;
+            src.loopStart = startTime;
+            src.loopEnd = startTime + duration;
+        }
+        
+        // Route through same channel EQ/Filter/Fader path but bypass standard linefader mute
+        const tempFader = audioCtx.createGain();
+        const faderCap = document.getElementById(`fader-ch${decks.indexOf(deck)+1}`);
+        const percent = parseFloat(faderCap.style.top) || 80;
+        tempFader.gain.value = Math.pow(1 - (percent / 100), 2);
+
+        src.connect(deck.filterHP).connect(tempFader).connect(deck.crossFader);
+        src.start(0, startTime);
+        deck.activeSourceNode = src;
+    }
+
+    // --- FX BUTTONS ---
+    function toggleFx(btn) {
+        const grid = btn.parentElement;
+        const buttons = grid.querySelectorAll('.fx-btn');
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Strip line breaks (e.g., BACK\nSPIN -> BACK SPIN)
+        currentBeatFX = btn.innerText.replace(/\n/g, ' ').trim();
+        
+        // Update screen text if visible
+        if(grid.parentElement.querySelector('.fx-btn-grid')) {
+            document.querySelector('.fx-title').innerText = currentBeatFX;
+            document.querySelectorAll('.s11-screen-fxbar div:first-child').forEach(el => {
+                el.innerText = currentBeatFX;
+            });
+        }
+    }
+
+    // --- FX PADDLES & ROUTING ---
+    function updateFXParams() {
+        if(!audioCtx) return;
+        const t = document.getElementById('fx-time-slider').value;
+        const f = document.getElementById('fx-feedback-slider').value;
+        document.getElementById('fx-time-display').innerText = `TIME: ${t}ms`;
+        document.getElementById('fx-feedback-display').innerText = `FBACK: ${Math.round(f*100)}%`;
+        
+        decks.forEach(deck => {
+            if(deck && deck.fx) {
+                deck.fx.delay.delayTime.value = t / 1000;
+                deck.fx.feedback.gain.value = f;
+            }
+        });
+    }
+
+    function applyFXState(deckNum) {
+        const deck = decks[deckNum-1];
+        if(!deck || !deck.fx) return;
+        
+        const isBrake = currentBeatFX === 'VINYL BRAKE';
+        const isSpin = currentBeatFX === 'BACK SPIN';
+        const isDSP = !isBrake && !isSpin;
+
+        // 1. Handle DSP Audio Node Effects (Echo, Reverb, Flanger)
+        if(deck.fx.on && isDSP) {
+            deck.fx.wet.gain.setTargetAtTime(deck.fx.amount, audioCtx.currentTime, 0.05);
+            
+            // Route input to the selected effect path
+            deck.fx.echoInput.gain.value = currentBeatFX === 'ECHO' ? 1 : 0;
+            deck.fx.reverbInput.gain.value = currentBeatFX === 'REVERB' ? 1 : 0;
+            deck.fx.flangerInput.gain.value = currentBeatFX === 'FLANGER' ? 1 : 0;
+        } else {
+            deck.fx.wet.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+        }
+
+        // 2. Handle Turntable/Media Effects (Brake, Spin)
+        if(deck.fx.on) {
+            if (isBrake && !deck.brakeInterval) {
+                deck.wasPlaying = !deck.audioEl.paused;
+                let rate = deck.audioEl.playbackRate;
+                deck.brakeInterval = setInterval(() => {
+                    let dropSpeed = Math.max(0.01, 0.15 * (1.1 - deck.fx.amount)); // Depth knob maps to stop speed
+                    rate -= dropSpeed; 
+                    if (rate <= 0) {
+                        rate = 0;
+                        deck.audioEl.pause();
+                        clearInterval(deck.brakeInterval);
+                    }
+                    deck.audioEl.playbackRate = Math.max(0, rate);
+                }, 30);
+            }
+            if (isSpin && !deck.spinInterval) {
+                deck.wasPlaying = !deck.audioEl.paused;
+                deck.audioEl.pause(); 
+                deck.spinInterval = setInterval(() => {
+                    let spinSpeed = Math.max(0.05, 0.4 * deck.fx.amount); // Depth knob maps to spin speed
+                    deck.audioEl.currentTime = Math.max(0, deck.audioEl.currentTime - spinSpeed);
+                    if (deck.audioEl.currentTime <= 0) clearInterval(deck.spinInterval);
+                }, 30);
+            }
+        } else {
+            // Restore playback state when paddle released
+            if (deck.brakeInterval) { clearInterval(deck.brakeInterval); deck.brakeInterval = null; }
+            if (deck.spinInterval) { clearInterval(deck.spinInterval); deck.spinInterval = null; }
+            
+            if (deck.audioEl.playbackRate !== 1.0 || (isSpin || isBrake)) {
+                deck.audioEl.playbackRate = 1.0;
+                if (deck.wasPlaying && deck.audioEl.paused) {
+                    deck.audioEl.play().catch(()=>{});
+                }
+            }
+        }
+    }
+
+    function paddleDown(id) {
+        const paddle = document.getElementById(id);
+        const deckNum = id === 'paddle-l' ? 1 : 2;
+        if(!paddle.classList.contains('locked')) {
+            paddle.classList.add('momentary');
+            if(decks[deckNum-1]) { decks[deckNum-1].fx.on = true; applyFXState(deckNum); }
+        }
+    }
+    function paddleUp(id) {
+        const paddle = document.getElementById(id);
+        const deckNum = id === 'paddle-l' ? 1 : 2;
+        paddle.classList.remove('momentary');
+        if(!paddle.classList.contains('locked') && decks[deckNum-1]) {
+            decks[deckNum-1].fx.on = false; applyFXState(deckNum);
+        }
+    }
+    function paddleLock(id) {
+        const paddle = document.getElementById(id);
+        const deckNum = id === 'paddle-l' ? 1 : 2;
+        paddle.classList.toggle('locked');
+        paddle.classList.remove('momentary');
+        if(decks[deckNum-1]) {
+            decks[deckNum-1].fx.on = paddle.classList.contains('locked');
+            applyFXState(deckNum);
+        }
+    }
+
+    // --- SCREEN TABS ---
+    function switchTab(index) {
+        const tabs = document.querySelectorAll('.screen-tab');
+        const contents = document.querySelectorAll('.screen-content');
+        
+        tabs.forEach((t, i) => {
+            if(i === index) t.classList.add('active');
+            else t.classList.remove('active');
+        });
+        
+        contents.forEach((c, i) => {
+            if(i === index) c.classList.add('active');
+            else c.classList.remove('active');
+        });
+    }
+
+    // --- WAVEFORMS & TRANSPORT ---
+    async function decodeWaveform(file, deckNum) {
+        const arrayBuffer = await file.arrayBuffer();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        const deck = decks[deckNum - 1];
+        deck.duration = audioBuffer.duration;
+        deck.audioBuffer = audioBuffer;
+
+        // Extract peaks for drawing
+        const channelData = audioBuffer.getChannelData(0);
+        const step = Math.ceil(channelData.length / 800); 
+        const peaks = [];
+        for (let i = 0; i < 800; i++) {
+            let min = 1.0;
+            let max = -1.0;
+            for (let j = 0; j < step; j++) {
+                const datum = channelData[(i * step) + j];
+                if (datum < min) min = datum;
+                if (datum > max) max = datum;
+            }
+            peaks.push({ min, max });
+        }
+        deck.peaks = peaks;
+        drawWaveformStatic(deckNum);
+        calculateSlices(deckNum);
+    }
+
+    function updateSlicerThreshold(val) {
+        decks[0].sliceThreshold = parseFloat(val);
+        decks[1].sliceThreshold = parseFloat(val);
+        calculateSlices(1); calculateSlices(2);
+    }
+
+    function calculateSlices(deckNum) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.audioBuffer) return;
+        deck.slices = [];
+        
+        if (deck.sliceThreshold <= 0) {
+            updatePadLights(deckNum);
+            return;
+        }
+
+        const data = deck.audioBuffer.getChannelData(0);
+        const debounceSamples = audioCtx.sampleRate * 0.1; // 100ms
+        let lastHit = -debounceSamples;
+
+        for (let i = 0; i < data.length; i++) {
+            if (Math.abs(data[i]) > deck.sliceThreshold && (i - lastHit) > debounceSamples) {
+                deck.slices.push(i / audioCtx.sampleRate);
+                lastHit = i;
+            }
+        }
+        updatePadLights(deckNum);
+    }
+
+    function drawWaveformStatic(deckNum) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.peaks) return;
+
+        const canvas = document.getElementById(`canvas-deck-${deckNum}`);
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        
+        // Vertical rendering parameters
+        const centerX = rect.width / 2;
+        const height = rect.height;
+        const numPeaks = deck.peaks.length;
+
+        ctx.beginPath();
+        for (let i = 0; i < numPeaks; i++) {
+            const y = (i / numPeaks) * height; // Draw from top to bottom
+            const peak = deck.peaks[i];
+            const xMin = centerX + (peak.min * centerX * 0.9);
+            const xMax = centerX + (peak.max * centerX * 0.9);
+            ctx.moveTo(xMin, y);
+            ctx.lineTo(xMax, y);
+        }
+        
+        // Color matching Serato style based on decks (Deck 1 Orange/Red, Deck 2 Blue/Purple)
+        ctx.strokeStyle = deckNum === 1 ? '#ff5500' : '#00aaff';
+        ctx.stroke();
+    }
+
+    // Handle Resize mapping
+    window.addEventListener('resize', () => {
+        drawWaveformStatic(1);
+        drawWaveformStatic(2);
+    });
+
+    // Seek / Scrub Interaction (Vertical Update)
+    function setupWaveformUI(deckNum) {
+        const container = document.getElementById(`wave-deck-${deckNum}`);
+        let isDraggingPlayhead = false;
+
+        container.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('loop-marker')) return;
+            isDraggingPlayhead = true;
+            seek(e);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDraggingPlayhead) seek(e);
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDraggingPlayhead = false;
+        });
+
+        function seek(e) {
+            const deck = decks[deckNum - 1];
+            if (!deck || !deck.duration) return;
+            const rect = container.getBoundingClientRect();
+            let y = e.clientY - rect.top; // Track vertical Y position
+            y = Math.max(0, Math.min(y, rect.height));
+            const percent = y / rect.height;
+            deck.audioEl.currentTime = percent * deck.duration;
+        }
+    }
+
+    // Marker Dragging Interaction (Vertical Update)
+    function setupMarkerDragging(deckNum) {
+        const container = document.getElementById(`wave-deck-${deckNum}`);
+        const markerIn = document.getElementById(`loop-in-${deckNum}`);
+        const markerOut = document.getElementById(`loop-out-${deckNum}`);
+        
+        let draggingMarker = null;
+
+        const onDown = (type) => (e) => {
+            e.stopPropagation();
+            draggingMarker = type;
+            document.body.style.cursor = 'ns-resize'; // Vertical resize cursor
+        };
+
+        markerIn.addEventListener('mousedown', onDown('in'));
+        markerOut.addEventListener('mousedown', onDown('out'));
+
+        window.addEventListener('mousemove', (e) => {
+            if (!draggingMarker) return;
+            const deck = decks[deckNum - 1];
+            if (!deck || !deck.duration) return;
+            
+            const rect = container.getBoundingClientRect();
+            let y = e.clientY - rect.top; // Track vertical Y position
+            y = Math.max(0, Math.min(y, rect.height));
+            const percent = y / rect.height;
+            const time = percent * deck.duration;
+
+            if (draggingMarker === 'in') {
+                deck.loopIn = Math.min(time, deck.loopOut !== null ? deck.loopOut : deck.duration);
+            } else {
+                deck.loopOut = Math.max(time, deck.loopIn !== null ? deck.loopIn : 0);
+            }
+            updateLoopUI(deckNum);
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (draggingMarker) {
+                draggingMarker = null;
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    setupWaveformUI(1); setupWaveformUI(2);
+    setupMarkerDragging(1); setupMarkerDragging(2);
+
+    // Main Loop Logic
+    function handleLoopInHalf(deckNum) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.duration) return;
+        
+        if (isShiftDown) {
+            // SHIFT + 1/2X = IN point
+            deck.loopIn = deck.audioEl.currentTime;
+            if (deck.loopOut !== null && deck.loopIn >= deck.loopOut) {
+                deck.loopOut = null;
+                deck.loopActive = false;
+                document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
+            }
+        } else {
+            // 1/2X
+            if (deck.loopActive && deck.loopIn !== null && deck.loopOut !== null) {
+                const len = deck.loopOut - deck.loopIn;
+                deck.loopOut = deck.loopIn + (len / 2);
+            }
+        }
+        updateLoopUI(deckNum);
+    }
+    
+    function handleLoopOutDouble(deckNum) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.duration) return;
+        
+        if (isShiftDown) {
+            // SHIFT + 2X = OUT point
+            deck.loopOut = Math.max(deck.audioEl.currentTime, deck.loopIn || 0);
+            deck.loopActive = true;
+            document.getElementById(`loop-active-${deckNum}`).classList.add('active');
+        } else {
+            // 2X
+            if (deck.loopActive && deck.loopIn !== null && deck.loopOut !== null) {
+                const len = deck.loopOut - deck.loopIn;
+                deck.loopOut = Math.min(deck.loopIn + (len * 2), deck.duration);
+            }
+        }
+        updateLoopUI(deckNum);
+    }
+    
+    function toggleLoop(deckNum) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.duration) return;
+        
+        if (isShiftDown) {
+            // SHIFT + AUTO LOOP = Toggle ACTIVE state of saved loop
+            if (deck.loopIn !== null && deck.loopOut !== null) {
+                deck.loopActive = !deck.loopActive;
+                document.getElementById(`loop-active-${deckNum}`).classList.toggle('active', deck.loopActive);
+            }
+        } else {
+            // AUTO LOOP (Start/Stop)
+            if (deck.loopActive) {
+                deck.loopActive = false;
+                document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
+            } else {
+                deck.loopIn = deck.audioEl.currentTime;
+                deck.loopOut = Math.min(deck.loopIn + 2.0, deck.duration);
+                deck.loopActive = true;
+                document.getElementById(`loop-active-${deckNum}`).classList.add('active');
+            }
+        }
+        
+        updateLoopUI(deckNum);
+    }
+
+    function updateLoopUI(deckNum) {
+        const deck = decks[deckNum - 1];
+        const markerIn = document.getElementById(`loop-in-${deckNum}`);
+        const markerOut = document.getElementById(`loop-out-${deckNum}`);
+        const region = document.getElementById(`loop-region-${deckNum}`);
+
+        if (deck.loopIn !== null) {
+            markerIn.style.display = 'block';
+            markerIn.style.top = `${(deck.loopIn / deck.duration) * 100}%`;
+        } else {
+            markerIn.style.display = 'none';
+        }
+
+        if (deck.loopOut !== null) {
+            markerOut.style.display = 'block';
+            markerOut.style.top = `${(deck.loopOut / deck.duration) * 100}%`;
+        } else {
+            markerOut.style.display = 'none';
+        }
+
+        if (deck.loopIn !== null && deck.loopOut !== null) {
+            region.style.display = 'block';
+            const inPct = (deck.loopIn / deck.duration) * 100;
+            const outPct = (deck.loopOut / deck.duration) * 100;
+            region.style.top = `${inPct}%`;
+            region.style.height = `${outPct - inPct}%`; // Draw region vertically
+            region.style.background = deck.loopActive ? 'rgba(255, 115, 0, 0.4)' : 'rgba(119, 119, 119, 0.4)';
+        } else {
+            region.style.display = 'none';
+        }
+    }
+
+    function updatePlayheads() {
+        requestAnimationFrame(updatePlayheads);
+        for (let i = 0; i < 2; i++) {
+            const deck = decks[i];
+            if (!deck || !deck.audioEl || !deck.duration) continue;
+
+            const currTime = deck.audioEl.currentTime;
+
+            // Enforce Loop
+            if (deck.loopActive && deck.loopOut !== null && deck.loopIn !== null) {
+                if (currTime >= deck.loopOut) {
+                    // Prevent tight looping glitches if OUT is too close to IN
+                    if (deck.loopOut - deck.loopIn > 0.02) {
+                        deck.audioEl.currentTime = deck.loopIn;
+                    } else {
+                        deck.loopActive = false;
+                        document.getElementById(`loop-active-${i + 1}`).classList.remove('active');
+                        updateLoopUI(i + 1);
+                    }
+                }
+            }
+
+            // Update Vertical Playhead UI
+            const percent = (currTime / deck.duration) * 100;
+            const playhead = document.getElementById(`playhead-${i + 1}`);
+            if(playhead) playhead.style.top = `${percent}%`;
+        }
+    }
+    updatePlayheads(); // Start render loop
+
+    // --- REAL VU METERS ---
+    const meterLevels = { 'vu-l': 0, 'vu-r': 0, 'vu-master-l': 0, 'vu-master-r': 0 };
+
+    function createVUMeter(id) {
+        const container = document.getElementById(id);
+        container.innerHTML = '';
+        for(let i=0; i<12; i++) {
+            const led = document.createElement('div');
+            led.className = `vu-led ${i > 9 ? 'red' : i > 6 ? 'yellow' : 'green'}`;
+            container.appendChild(led);
+        }
+    }
+
+    ['vu-l', 'vu-master-l', 'vu-master-r', 'vu-r'].forEach(createVUMeter);
+
+    function startMetering() {
+        const dataArray = new Float32Array(256);
+        
+        function drawMeters() {
+            requestAnimationFrame(drawMeters);
+            if(!audioCtx) return;
+            
+            updateMeter('vu-l', decks[0].analyser, dataArray);
+            updateMeter('vu-r', decks[1].analyser, dataArray);
+            updateMeter('vu-master-l', master.analyser, dataArray);
+            updateMeter('vu-master-r', master.analyser, dataArray);
+        }
+        drawMeters();
+    }
+
+    function updateMeter(containerId, analyser, dataArray) {
+        if(!analyser) return;
+        analyser.getFloatTimeDomainData(dataArray);
+        
+        let peak = 0.0;
+        for (const amplitude of dataArray) {
+            if(Math.abs(amplitude) > peak) peak = Math.abs(amplitude);
+        }
+        
+        const db = 20 * Math.log10(peak || 0.0001);
+        const minDb = -36;
+        const maxDb = 6;
+        let targetLevel = ((db - minDb) / (maxDb - minDb)) * 12;
+        
+        // Ballistics
+        if (targetLevel > meterLevels[containerId]) {
+            meterLevels[containerId] = targetLevel; // Instant attack
+        } else {
+            meterLevels[containerId] -= 0.4; // Decay
+        }
+        
+        let displayLevel = Math.max(0, Math.min(12, Math.floor(meterLevels[containerId])));
+        
+        const container = document.getElementById(containerId);
+        const leds = container.children;
+        for(let i=0; i<12; i++) {
+            if(i < displayLevel) leds[i].classList.add('on');
+            else leds[i].classList.remove('on');
+        }
+    }
+
+</script>
+</body>
+</html>
