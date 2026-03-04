@@ -1748,7 +1748,7 @@
                 on: false, amount: 0 
             },
             loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null,
-            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3
+            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: 0, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0 }
         };
     }
 
@@ -2002,10 +2002,14 @@
     const padColors = {
         'HOT_CUE': ['#00ffff', '#ff00ff', '#ffff00', '#ff0000', '#00ff00', '#0000ff', '#ff8800', '#ffffff'],
         'PITCH_PLAY': Array(8).fill('#ffcc00'),
+        'GATE_CUE': Array(8).fill('#ffd966'),
         'ROLL': Array(8).fill('#00ffff'),
         'SLICER_LOOP': Array(8).fill('#00aaff'),
+        'CUE_LOOP': Array(8).fill('#ffaa00'),
         'SLICER': Array(8).fill('#ff0000'),
-        'SAMPLER': Array(8).fill('#ff00ff')
+        'SAMPLER': Array(8).fill('#ff00ff'),
+        'SCRATCH_BANK': Array(8).fill('#ff3366'),
+        'SAVED_FLIP': Array(8).fill('#66ff66')
     };
 
     function createPads(deckNum, containerId) {
@@ -2052,10 +2056,22 @@
         const deck = decks[deckNum - 1];
         if(!deck) return;
 
-        // Manual behavior: SHIFT + HOT CUE enters Pitch Play, SHIFT + ROLL enters Slicer Loop.
-        if (mode === 'HOT_CUE' && isShiftDown) deck.padMode = 'PITCH_PLAY';
-        else if (mode === 'ROLL' && isShiftDown) deck.padMode = 'SLICER_LOOP';
-        else deck.padMode = mode;
+        const now = performance.now();
+        let nextMode = mode;
+
+        if (mode === 'HOT_CUE') {
+            if (isShiftDown) nextMode = 'PITCH_PLAY';
+            else if ((now - deck.lastModeTap.HOT_CUE) < modeDoubleTapWindowMs) nextMode = 'GATE_CUE';
+            deck.lastModeTap.HOT_CUE = now;
+        } else if (mode === 'ROLL') {
+            if (isShiftDown) nextMode = 'SLICER_LOOP';
+            else if ((now - deck.lastModeTap.ROLL) < modeDoubleTapWindowMs) nextMode = 'CUE_LOOP';
+            deck.lastModeTap.ROLL = now;
+        } else if (mode === 'SAMPLER' && isShiftDown) {
+            nextMode = 'SCRATCH_BANK';
+        }
+
+        deck.padMode = nextMode;
 
         const siblings = btn.parentElement.children;
         for(let s of siblings) s.classList.remove('active');
@@ -2068,7 +2084,7 @@
     function updatePadLights(deckNum) {
         const deck = decks[deckNum - 1];
         if(!deck) return;
-        const colors = padColors[deck.padMode];
+        const colors = padColors[deck.padMode] || padColors['HOT_CUE'];
 
         for (let i = 0; i < 8; i++) {
             const pad = document.getElementById(`pad-${deckNum}-${i}`);
@@ -2082,7 +2098,11 @@
             if (deck.padMode === 'SAMPLER') isActive = !!getSamplerBuffer(deck, i);
             if (deck.padMode === 'SLICER' && deck.slices[i] !== undefined) isActive = true;
             if (deck.padMode === 'PITCH_PLAY') isActive = true;
+            if (deck.padMode === 'GATE_CUE') isActive = deck.hotCues[i] !== null;
             if (deck.padMode === 'SLICER_LOOP') isActive = true;
+            if (deck.padMode === 'CUE_LOOP') isActive = true;
+            if (deck.padMode === 'SCRATCH_BANK') isActive = !!getScratchBuffer(deck, i);
+            if (deck.padMode === 'SAVED_FLIP') isActive = deck.flipSlots[i] !== null;
 
             if(isActive) {
                 pad.style.opacity = '1';
@@ -2105,6 +2125,9 @@
     const pitchRangeNames = ['UP', 'MIDDLE', 'DOWN'];
     const slicerLoopDomains = [2, 4, 8, 16, 32, 64]; // beats
     const slicerLoopQuants = [0.125, 0.25, 0.5, 1.0]; // section fractions
+    const cueLoopBeatLengths = [0.125, 0.25, 0.5, 1, 2, 4, 8, 16];
+    const modeDoubleTapWindowMs = 500;
+
 
     function updatePadStatus(deckNum) {
         const deck = decks[deckNum - 1];
@@ -2114,10 +2137,18 @@
         let msg = `MODE: ${deck.padMode.replace('_', ' ')}`;
         if (deck.padMode === 'SAMPLER') {
             msg += ` | BANK ${samplerBankLabels[deck.samplerBank]}`;
+        } else if (deck.padMode === 'SCRATCH_BANK') {
+            msg += ` | BANK ${samplerBankLabels[deck.scratchBank]} | SHIFT+SAMPLER`;
         } else if (deck.padMode === 'PITCH_PLAY') {
             msg += ` | RANGE ${pitchRangeNames[deck.pitchRangeIndex]} | SHIFT+PAD = SET CUE`;
+        } else if (deck.padMode === 'GATE_CUE') {
+            msg += ` | HOLD PAD TO PLAY`;
         } else if (deck.padMode === 'SLICER_LOOP') {
             msg += ` | DOMAIN ${slicerLoopDomains[deck.slicerDomainIndex]}b | Q ${slicerLoopQuants[deck.slicerQuantIndex]}x`;
+        } else if (deck.padMode === 'CUE_LOOP') {
+            msg += ` | LENGTH ${cueLoopBeatLengths[deck.cueLoopSizeIndex]} BEATS`;
+        } else if (deck.padMode === 'SAVED_FLIP') {
+            msg += ` | SHIFT+PAD SAVE, PAD PLAY`;
         }
         el.textContent = msg;
     }
@@ -2128,6 +2159,8 @@
 
         if (deck.padMode === 'SAMPLER') {
             deck.samplerBank = (deck.samplerBank + direction + samplerBankLabels.length) % samplerBankLabels.length;
+        } else if (deck.padMode === 'SCRATCH_BANK') {
+            deck.scratchBank = (deck.scratchBank + direction + samplerBankLabels.length) % samplerBankLabels.length;
         } else if (deck.padMode === 'PITCH_PLAY') {
             deck.pitchRangeIndex = (deck.pitchRangeIndex + direction + pitchRanges.length) % pitchRanges.length;
         } else if (deck.padMode === 'SLICER_LOOP') {
@@ -2135,6 +2168,14 @@
                 deck.slicerDomainIndex = Math.max(0, Math.min(slicerLoopDomains.length - 1, deck.slicerDomainIndex + direction));
             } else {
                 deck.slicerQuantIndex = Math.max(0, Math.min(slicerLoopQuants.length - 1, deck.slicerQuantIndex + direction));
+            }
+        } else if (deck.padMode === 'CUE_LOOP') {
+            deck.cueLoopSizeIndex = Math.max(0, Math.min(cueLoopBeatLengths.length - 1, deck.cueLoopSizeIndex + direction));
+            if (deck.loopActive && deck.loopIn !== null) {
+                const beats = cueLoopBeatLengths[deck.cueLoopSizeIndex];
+                const newLen = beats * getDeckBeatLengthSeconds(deck);
+                deck.loopOut = Math.min(deck.duration, deck.loopIn + newLen);
+                updateLoopUI(deckNum);
             }
         }
 
@@ -2145,6 +2186,12 @@
     function getSamplerBuffer(deck, padIdx) {
         if (!samplerBuffers.length) return null;
         const slot = deck.samplerBank * 8 + padIdx;
+        return samplerBuffers[slot] || samplerBuffers[padIdx] || null;
+    }
+
+    function getScratchBuffer(deck, padIdx) {
+        if (!samplerBuffers.length) return null;
+        const slot = deck.scratchBank * 8 + padIdx;
         return samplerBuffers[slot] || samplerBuffers[padIdx] || null;
     }
 
@@ -2221,6 +2268,24 @@
                 src.start();
             }
         }
+        else if (deck.padMode === 'SCRATCH_BANK') {
+            const sample = getScratchBuffer(deck, padIdx);
+            if (sample) {
+                const src = audioCtx.createBufferSource();
+                src.buffer = sample;
+                src.connect(master.gain);
+                src.start();
+            }
+        }
+        else if (deck.padMode === 'SAVED_FLIP') {
+            if (isShiftDown) {
+                deck.flipSlots[padIdx] = deck.audioEl.currentTime;
+                updatePadLights(deckNum);
+            } else if (deck.flipSlots[padIdx] !== null) {
+                deck.audioEl.currentTime = deck.flipSlots[padIdx];
+                deck.audioEl.play().catch(() => {});
+            }
+        }
         else if (deck.padMode === 'PITCH_PLAY') {
             if (isShiftDown) {
                 deck.hotCues[padIdx] = deck.audioEl.currentTime;
@@ -2231,6 +2296,25 @@
         }
         else if (deck.padMode === 'SLICER_LOOP') {
             triggerSlicerLoopPad(deck, padIdx);
+        }
+        else if (deck.padMode === 'CUE_LOOP') {
+            const beats = cueLoopBeatLengths[padIdx] ?? cueLoopBeatLengths[deck.cueLoopSizeIndex];
+            const lengthSec = beats * getDeckBeatLengthSeconds(deck);
+            deck.cueLoopSizeIndex = Math.max(0, cueLoopBeatLengths.indexOf(beats));
+            deck.loopIn = deck.audioEl.currentTime;
+            deck.loopOut = Math.min(deck.duration || Infinity, deck.loopIn + lengthSec);
+            deck.loopActive = true;
+            document.getElementById(`loop-active-${deckNum}`).classList.add('active');
+            updateLoopUI(deckNum);
+            updatePadStatus(deckNum);
+        }
+        else if (deck.padMode === 'GATE_CUE') {
+            const cue = deck.hotCues[padIdx];
+            if (cue !== null) {
+                deck.gateCuePad = padIdx;
+                deck.audioEl.currentTime = cue;
+                deck.audioEl.play().catch(() => {});
+            }
         }
         else if (deck.padMode === 'SLICER') {
             if(!deck.audioBuffer || deck.slices[padIdx] === undefined) return;
@@ -2254,6 +2338,13 @@
                 const percent = parseFloat(faderCap.style.top) || 80;
                 updateFaderAudio(`fader-ch${deckNum}`, percent); 
             }
+        }
+
+        if (deck.padMode === 'GATE_CUE' && deck.gateCuePad !== null) {
+            const cue = deck.hotCues[deck.gateCuePad];
+            deck.audioEl.pause();
+            if (cue !== null) deck.audioEl.currentTime = cue;
+            deck.gateCuePad = null;
         }
     }
 
@@ -2650,11 +2741,11 @@
         if (!deck || !deck.duration) return;
         
         if (isShiftDown) {
-            // SHIFT + AUTO LOOP = Toggle ACTIVE state of saved loop
-            if (deck.loopIn !== null && deck.loopOut !== null) {
-                deck.loopActive = !deck.loopActive;
-                document.getElementById(`loop-active-${deckNum}`).classList.toggle('active', deck.loopActive);
-            }
+            // SHIFT + SAVED LOOP enters Saved Flip mode
+            deck.padMode = 'SAVED_FLIP';
+            updatePadStatus(deckNum);
+            updatePadLights(deckNum);
+            return;
         } else {
             // AUTO LOOP (Start/Stop)
             if (deck.loopActive) {
