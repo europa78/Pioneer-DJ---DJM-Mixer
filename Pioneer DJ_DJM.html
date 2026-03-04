@@ -1,4 +1,8 @@
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DJM-S11 Hardware Emulator</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Oswald:wght@500;700&display=swap');
@@ -1737,7 +1741,7 @@
                 echoInput, reverbInput, flangerInput,
                 on: false, amount: 0 
             },
-            loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null,
+            loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null,
             padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0
         };
     }
@@ -1746,8 +1750,15 @@
         if (!file) return;
         initAudio();
         audioCtx.resume();
-        const url = URL.createObjectURL(file);
         const deck = decks[deckNum - 1];
+
+        if (deck.objectUrl) {
+            URL.revokeObjectURL(deck.objectUrl);
+            deck.objectUrl = null;
+        }
+
+        const url = URL.createObjectURL(file);
+        deck.objectUrl = url;
         deck.audioEl.src = url;
         
         // Reset loop & playback state
@@ -1767,6 +1778,15 @@
         btn.classList.remove('active');
         btn.innerText = '▶ PLAY';
     }
+
+    window.addEventListener('beforeunload', () => {
+        decks.forEach((deck) => {
+            if (deck && deck.objectUrl) {
+                URL.revokeObjectURL(deck.objectUrl);
+                deck.objectUrl = null;
+            }
+        });
+    });
 
     function togglePlay(deckNum) {
         initAudio();
@@ -1994,13 +2014,20 @@
             
             pad.addEventListener('mousedown', onDown);
             pad.addEventListener('touchstart', onDown);
-            window.addEventListener('mouseup', onUp);
+            pad.addEventListener('mouseup', onUp);
             pad.addEventListener('touchend', onUp);
             
             container.appendChild(pad);
         }
         updatePadLights(deckNum);
     }
+
+    window.addEventListener('mouseup', (e) => {
+        document.querySelectorAll('.perf-pad.active').forEach((pad) => {
+            const [, deckNum, padIdx] = pad.id.split('-');
+            handlePadUp(parseInt(deckNum, 10), parseInt(padIdx, 10), pad, e);
+        });
+    });
 
     createPads(1, 'pads-left');
     createPads(2, 'pads-right');
@@ -2119,7 +2146,8 @@
         tempFader.gain.value = Math.pow(1 - (percent / 100), 2);
 
         src.connect(deck.filterHP).connect(tempFader).connect(deck.crossFader);
-        src.start(0, startTime);
+        if (loop) src.start(0, startTime);
+        else src.start(0, startTime, duration);
         deck.activeSourceNode = src;
     }
 
@@ -2288,8 +2316,11 @@
     }
 
     function updateSlicerThreshold(val) {
-        decks[0].sliceThreshold = parseFloat(val);
-        decks[1].sliceThreshold = parseFloat(val);
+        const parsed = parseFloat(val);
+        if (!Number.isFinite(parsed)) return;
+
+        if (decks[0]) decks[0].sliceThreshold = parsed;
+        if (decks[1]) decks[1].sliceThreshold = parsed;
         calculateSlices(1); calculateSlices(2);
     }
 
