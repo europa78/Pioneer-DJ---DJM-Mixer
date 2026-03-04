@@ -2016,18 +2016,23 @@
             pad.addEventListener('touchstart', onDown);
             pad.addEventListener('mouseup', onUp);
             pad.addEventListener('touchend', onUp);
+            pad.addEventListener('touchcancel', onUp);
             
             container.appendChild(pad);
         }
         updatePadLights(deckNum);
     }
 
-    window.addEventListener('mouseup', (e) => {
+    function releaseActivePads(e) {
         document.querySelectorAll('.perf-pad.active').forEach((pad) => {
             const [, deckNum, padIdx] = pad.id.split('-');
             handlePadUp(parseInt(deckNum, 10), parseInt(padIdx, 10), pad, e);
         });
-    });
+    }
+
+    window.addEventListener('mouseup', releaseActivePads);
+    window.addEventListener('touchend', releaseActivePads);
+    window.addEventListener('touchcancel', releaseActivePads);
 
     createPads(1, 'pads-left');
     createPads(2, 'pads-right');
@@ -2290,29 +2295,35 @@
 
     // --- WAVEFORMS & TRANSPORT ---
     async function decodeWaveform(file, deckNum) {
-        const arrayBuffer = await file.arrayBuffer();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        const deck = decks[deckNum - 1];
-        deck.duration = audioBuffer.duration;
-        deck.audioBuffer = audioBuffer;
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const deck = decks[deckNum - 1];
+            if (!deck) return;
 
-        // Extract peaks for drawing
-        const channelData = audioBuffer.getChannelData(0);
-        const step = Math.ceil(channelData.length / 800); 
-        const peaks = [];
-        for (let i = 0; i < 800; i++) {
-            let min = 1.0;
-            let max = -1.0;
-            for (let j = 0; j < step; j++) {
-                const datum = channelData[(i * step) + j];
-                if (datum < min) min = datum;
-                if (datum > max) max = datum;
+            deck.duration = audioBuffer.duration;
+            deck.audioBuffer = audioBuffer;
+
+            // Extract peaks for drawing
+            const channelData = audioBuffer.getChannelData(0);
+            const step = Math.ceil(channelData.length / 800);
+            const peaks = [];
+            for (let i = 0; i < 800; i++) {
+                let min = 1.0;
+                let max = -1.0;
+                for (let j = 0; j < step; j++) {
+                    const datum = channelData[(i * step) + j];
+                    if (datum < min) min = datum;
+                    if (datum > max) max = datum;
+                }
+                peaks.push({ min, max });
             }
-            peaks.push({ min, max });
+            deck.peaks = peaks;
+            drawWaveformStatic(deckNum);
+            calculateSlices(deckNum);
+        } catch (err) {
+            console.error(`Waveform decode failed for deck ${deckNum}:`, err);
         }
-        deck.peaks = peaks;
-        drawWaveformStatic(deckNum);
-        calculateSlices(deckNum);
     }
 
     function updateSlicerThreshold(val) {
