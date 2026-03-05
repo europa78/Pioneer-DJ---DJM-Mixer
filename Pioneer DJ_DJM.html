@@ -1748,7 +1748,7 @@
                 on: false, amount: 0 
             },
             loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null,
-            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: 0, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0 }
+            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: 0, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0, SAMPLER: 0, AUTO_LOOP: 0 }, transportTempCue: null, isKeyLockOn: false, isSyncOn: false, isDvsInternal: false
         };
     }
 
@@ -2009,7 +2009,11 @@
         'SLICER': Array(8).fill('#ff0000'),
         'SAMPLER': Array(8).fill('#ff00ff'),
         'SCRATCH_BANK': Array(8).fill('#ff3366'),
-        'SAVED_FLIP': Array(8).fill('#66ff66')
+        'SAVED_FLIP': Array(8).fill('#66ff66'),
+        'AUTO_LOOP_PAD': Array(8).fill('#ff8800'),
+        'TRANSPORT': ['#ffd166', '#ffd166', '#ff9f1c', '#ff9f1c', '#2ec4b6', '#00d9ff', '#a0c4ff', '#ff595e'],
+        'PAD_FX_1': Array(8).fill('#66ccff'),
+        'PAD_FX_2': Array(8).fill('#3399ff')
     };
 
     function createPads(deckNum, containerId) {
@@ -2064,11 +2068,14 @@
             else if ((now - deck.lastModeTap.HOT_CUE) < modeDoubleTapWindowMs) nextMode = 'GATE_CUE';
             deck.lastModeTap.HOT_CUE = now;
         } else if (mode === 'ROLL') {
-            if (isShiftDown) nextMode = 'SLICER_LOOP';
+            if (isShiftDown) nextMode = 'PAD_FX_2';
             else if ((now - deck.lastModeTap.ROLL) < modeDoubleTapWindowMs) nextMode = 'CUE_LOOP';
+            else nextMode = 'PAD_FX_1';
             deck.lastModeTap.ROLL = now;
-        } else if (mode === 'SAMPLER' && isShiftDown) {
-            nextMode = 'SCRATCH_BANK';
+        } else if (mode === 'SAMPLER') {
+            if (isShiftDown) nextMode = 'SCRATCH_BANK';
+            else if ((now - deck.lastModeTap.SAMPLER) < modeDoubleTapWindowMs) nextMode = 'TRANSPORT';
+            deck.lastModeTap.SAMPLER = now;
         }
 
         deck.padMode = nextMode;
@@ -2103,6 +2110,9 @@
             if (deck.padMode === 'CUE_LOOP') isActive = true;
             if (deck.padMode === 'SCRATCH_BANK') isActive = !!getScratchBuffer(deck, i);
             if (deck.padMode === 'SAVED_FLIP') isActive = deck.flipSlots[i] !== null;
+            if (deck.padMode === 'AUTO_LOOP_PAD') isActive = true;
+            if (deck.padMode === 'TRANSPORT') isActive = true;
+            if (deck.padMode === 'PAD_FX_1' || deck.padMode === 'PAD_FX_2') isActive = true;
 
             if(isActive) {
                 pad.style.opacity = '1';
@@ -2127,6 +2137,9 @@
     const slicerLoopQuants = [0.125, 0.25, 0.5, 1.0]; // section fractions
     const cueLoopBeatLengths = [0.125, 0.25, 0.5, 1, 2, 4, 8, 16];
     const modeDoubleTapWindowMs = 500;
+    const transportNudgeRates = [0.92, 1.08];
+    const padFxAmounts = [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0];
+
 
 
     function updatePadStatus(deckNum) {
@@ -2149,6 +2162,12 @@
             msg += ` | LENGTH ${cueLoopBeatLengths[deck.cueLoopSizeIndex]} BEATS`;
         } else if (deck.padMode === 'SAVED_FLIP') {
             msg += ` | SHIFT+PAD SAVE, PAD PLAY`;
+        } else if (deck.padMode === 'AUTO_LOOP_PAD') {
+            msg += ` | PAD = LOOP LENGTH`;
+        } else if (deck.padMode === 'TRANSPORT') {
+            msg += ` | KLOCK ${deck.isKeyLockOn ? 'ON' : 'OFF'} | SYNC ${deck.isSyncOn ? 'ON' : 'OFF'}`;
+        } else if (deck.padMode === 'PAD_FX_1' || deck.padMode === 'PAD_FX_2') {
+            msg += ` | PAD FX ${deck.padMode.endsWith('_2') ? '2' : '1'} | PAD=DEPTH`;
         }
         el.textContent = msg;
     }
@@ -2177,6 +2196,8 @@
                 deck.loopOut = Math.min(deck.duration, deck.loopIn + newLen);
                 updateLoopUI(deckNum);
             }
+        } else if (deck.padMode === 'AUTO_LOOP_PAD') {
+            deck.cueLoopSizeIndex = Math.max(0, Math.min(cueLoopBeatLengths.length - 1, deck.cueLoopSizeIndex + direction));
         }
 
         updatePadStatus(deckNum);
@@ -2240,6 +2261,70 @@
         playBufferSource(deck, start, Math.max(0.03, duration), true);
     }
 
+    function triggerAutoLoopPad(deckNum, padIdx) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.duration) return;
+        const beats = cueLoopBeatLengths[padIdx] ?? cueLoopBeatLengths[deck.cueLoopSizeIndex];
+        const lengthSec = beats * getDeckBeatLengthSeconds(deck);
+        deck.cueLoopSizeIndex = Math.max(0, cueLoopBeatLengths.indexOf(beats));
+        deck.loopIn = deck.audioEl.currentTime;
+        deck.loopOut = Math.min(deck.duration, deck.loopIn + lengthSec);
+        deck.loopActive = true;
+        document.getElementById(`loop-active-${deckNum}`).classList.add('active');
+        updateLoopUI(deckNum);
+        updatePadStatus(deckNum);
+    }
+
+    function triggerTransportPad(deckNum, padIdx, onRelease = false) {
+        const deck = decks[deckNum - 1];
+        if (!deck) return;
+        const audio = deck.audioEl;
+
+        if (padIdx === 0) audio.playbackRate = transportNudgeRates[0];
+        else if (padIdx === 1) audio.playbackRate = transportNudgeRates[1];
+        else if (padIdx === 2) audio.playbackRate = Math.max(0.5, audio.playbackRate - 0.01);
+        else if (padIdx === 3) audio.playbackRate = Math.min(2.0, audio.playbackRate + 0.01);
+        else if (padIdx === 4) {
+            if (isShiftDown) deck.isDvsInternal = !deck.isDvsInternal;
+            else deck.isKeyLockOn = !deck.isKeyLockOn;
+            audio.preservesPitch = deck.isKeyLockOn;
+            audio.mozPreservesPitch = deck.isKeyLockOn;
+            audio.webkitPreservesPitch = deck.isKeyLockOn;
+            updatePadStatus(deckNum);
+        } else if (padIdx === 5) {
+            if (isShiftDown) deck.isSyncOn = false;
+            else deck.isSyncOn = !deck.isSyncOn;
+            updatePadStatus(deckNum);
+        } else if (padIdx === 6) {
+            if (onRelease) {
+                if (deck.transportTempCue !== null) {
+                    audio.currentTime = deck.transportTempCue;
+                }
+                audio.pause();
+            } else {
+                if (deck.transportTempCue === null) deck.transportTempCue = audio.currentTime;
+                audio.play().catch(() => {});
+            }
+        } else if (padIdx === 7) {
+            if (isShiftDown && deck.transportTempCue !== null) {
+                audio.currentTime = deck.transportTempCue;
+                audio.play().catch(() => {});
+            } else if (audio.paused) {
+                audio.play().catch(() => {});
+            } else {
+                audio.pause();
+            }
+        }
+    }
+
+    function triggerPadFX(deckNum, padIdx) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.fx) return;
+        deck.fx.on = true;
+        deck.fx.amount = padFxAmounts[padIdx] || 0.5;
+        applyFXState(deckNum);
+    }
+
 
     function handlePadDown(deckNum, padIdx, padEl) {
         padEl.classList.add('active');
@@ -2298,15 +2383,16 @@
             triggerSlicerLoopPad(deck, padIdx);
         }
         else if (deck.padMode === 'CUE_LOOP') {
-            const beats = cueLoopBeatLengths[padIdx] ?? cueLoopBeatLengths[deck.cueLoopSizeIndex];
-            const lengthSec = beats * getDeckBeatLengthSeconds(deck);
-            deck.cueLoopSizeIndex = Math.max(0, cueLoopBeatLengths.indexOf(beats));
-            deck.loopIn = deck.audioEl.currentTime;
-            deck.loopOut = Math.min(deck.duration || Infinity, deck.loopIn + lengthSec);
-            deck.loopActive = true;
-            document.getElementById(`loop-active-${deckNum}`).classList.add('active');
-            updateLoopUI(deckNum);
-            updatePadStatus(deckNum);
+            triggerAutoLoopPad(deckNum, padIdx);
+        }
+        else if (deck.padMode === 'AUTO_LOOP_PAD') {
+            triggerAutoLoopPad(deckNum, padIdx);
+        }
+        else if (deck.padMode === 'TRANSPORT') {
+            triggerTransportPad(deckNum, padIdx, false);
+        }
+        else if (deck.padMode === 'PAD_FX_1' || deck.padMode === 'PAD_FX_2') {
+            triggerPadFX(deckNum, padIdx);
         }
         else if (deck.padMode === 'GATE_CUE') {
             const cue = deck.hotCues[padIdx];
@@ -2338,6 +2424,17 @@
                 const percent = parseFloat(faderCap.style.top) || 80;
                 updateFaderAudio(`fader-ch${deckNum}`, percent); 
             }
+        }
+
+        if (deck.padMode === 'TRANSPORT' && (padIdx === 0 || padIdx === 1)) {
+            deck.audioEl.playbackRate = 1.0;
+        }
+        if (deck.padMode === 'TRANSPORT' && padIdx === 6) {
+            triggerTransportPad(deckNum, padIdx, true);
+        }
+        if ((deck.padMode === 'PAD_FX_1' || deck.padMode === 'PAD_FX_2') && deck.fx) {
+            deck.fx.on = false;
+            applyFXState(deckNum);
         }
 
         if (deck.padMode === 'GATE_CUE' && deck.gateCuePad !== null) {
@@ -2739,26 +2836,34 @@
     function toggleLoop(deckNum) {
         const deck = decks[deckNum - 1];
         if (!deck || !deck.duration) return;
-        
+
+        const now = performance.now();
         if (isShiftDown) {
             // SHIFT + SAVED LOOP enters Saved Flip mode
             deck.padMode = 'SAVED_FLIP';
             updatePadStatus(deckNum);
             updatePadLights(deckNum);
             return;
-        } else {
-            // AUTO LOOP (Start/Stop)
-            if (deck.loopActive) {
-                deck.loopActive = false;
-                document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
-            } else {
-                deck.loopIn = deck.audioEl.currentTime;
-                deck.loopOut = Math.min(deck.loopIn + 2.0, deck.duration);
-                deck.loopActive = true;
-                document.getElementById(`loop-active-${deckNum}`).classList.add('active');
-            }
+        } else if ((now - deck.lastModeTap.AUTO_LOOP) < modeDoubleTapWindowMs) {
+            deck.padMode = 'AUTO_LOOP_PAD';
+            updatePadStatus(deckNum);
+            updatePadLights(deckNum);
+            deck.lastModeTap.AUTO_LOOP = now;
+            return;
         }
-        
+        deck.lastModeTap.AUTO_LOOP = now;
+
+        // AUTO LOOP (Start/Stop)
+        if (deck.loopActive) {
+            deck.loopActive = false;
+            document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
+        } else {
+            deck.loopIn = deck.audioEl.currentTime;
+            deck.loopOut = Math.min(deck.loopIn + 2.0, deck.duration);
+            deck.loopActive = true;
+            document.getElementById(`loop-active-${deckNum}`).classList.add('active');
+        }
+
         updateLoopUI(deckNum);
     }
 
