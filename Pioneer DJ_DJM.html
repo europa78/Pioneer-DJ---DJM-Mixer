@@ -2843,6 +2843,15 @@
         }
     }
 
+    function redrawVisibleWaveforms() {
+        [1, 2].forEach((deckNum) => {
+            const deck = decks[deckNum - 1];
+            if (!deck || !deck.peaks) return;
+            drawWaveformStatic(deckNum);
+            updateLoopUI(deckNum);
+        });
+    }
+
     // --- SCREEN TABS ---
     function switchTab(index) {
         const tabs = document.querySelectorAll('.screen-tab');
@@ -2857,6 +2866,10 @@
             if(i === index) c.classList.add('active');
             else c.classList.remove('active');
         });
+
+        if (index === 0) {
+            requestAnimationFrame(redrawVisibleWaveforms);
+        }
     }
 
     // --- WAVEFORMS & TRANSPORT ---
@@ -2932,7 +2945,11 @@
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
-        
+        if (!rect.width || !rect.height) {
+            requestAnimationFrame(() => drawWaveformStatic(deckNum));
+            return;
+        }
+
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         ctx.scale(dpr, dpr);
