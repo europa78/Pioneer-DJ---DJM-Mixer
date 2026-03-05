@@ -1898,7 +1898,7 @@
                 echoInput, reverbInput, flangerInput,
                 on: false, amount: 0 
             },
-            loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null,
+            loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null, waveformDecodeFailed: false,
             padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: globalSamplerBank, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0, SAMPLER: 0, AUTO_LOOP: 0, SAVED_LOOP: 0 }, transportTempCue: null, isKeyLockOn: false, isSyncOn: false, isDvsInternal: false, padFxBank: 0, keyShiftRangeIndex: 1, keyShiftSteps: 0
         };
     }
@@ -1924,6 +1924,7 @@
         deck.loopActive = false;
         deck.duration = 0;
         deck.peaks = null;
+        deck.waveformDecodeFailed = false;
         document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
         updateLoopUI(deckNum);
         
@@ -2901,6 +2902,10 @@
             drawWaveformStatic(deckNum);
             calculateSlices(deckNum);
         } catch (err) {
+            const deck = decks[deckNum - 1];
+            if (deck) {
+                deck.waveformDecodeFailed = true;
+            }
             console.error(`Waveform decode failed for deck ${deckNum}:`, err);
         }
     }
@@ -2973,6 +2978,42 @@
         
         // Color matching Serato style based on decks (Deck 1 Orange/Red, Deck 2 Blue/Purple)
         ctx.strokeStyle = deckNum === 1 ? '#ff5500' : '#00aaff';
+        ctx.stroke();
+    }
+
+
+    function drawWaveformRealtimeFallback(deckNum) {
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.analyser) return;
+
+        const canvas = document.getElementById(`canvas-deck-${deckNum}`);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const arr = new Float32Array(deck.analyser.fftSize);
+        deck.analyser.getFloatTimeDomainData(arr);
+
+        const centerX = rect.width / 2;
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        ctx.strokeStyle = deckNum === 1 ? '#ff5500' : '#00aaff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let y = 0; y < rect.height; y++) {
+            const idx = Math.floor((y / rect.height) * arr.length);
+            const amp = Math.max(-1, Math.min(1, arr[idx] || 0));
+            const spread = Math.abs(amp) * centerX * 0.9;
+            ctx.moveTo(centerX - spread, y);
+            ctx.lineTo(centerX + spread, y);
+        }
         ctx.stroke();
     }
 
@@ -3208,6 +3249,10 @@
             const percent = (currTime / deck.duration) * 100;
             const playhead = document.getElementById(`playhead-${i + 1}`);
             if(playhead) playhead.style.top = `${percent}%`;
+
+            if (!deck.peaks || deck.waveformDecodeFailed) {
+                drawWaveformRealtimeFallback(i + 1);
+            }
         }
     }
     updatePlayheads(); // Start render loop
