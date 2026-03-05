@@ -868,19 +868,19 @@
                         <!-- Top Info Bar -->
                         <div style="display:flex; justify-content:space-between; background:#000; color:#fff; padding:2px 4px; font-size:10px; border-bottom:1px solid #333;">
                             <span><span style="color:#aaa;">↻</span> 1/2</span>
-                            <span style="font-size:12px; font-weight:bold;">110.0</span>
-                            <span style="font-size:12px; font-weight:bold;">110.0</span>
+                            <span id="wave-bpm-1" style="font-size:12px; font-weight:bold;">110.0</span>
+                            <span id="wave-bpm-2" style="font-size:12px; font-weight:bold;">110.0</span>
                             <span><span style="color:#aaa;">↻</span> 8</span>
                         </div>
                         <!-- Sync Header -->
                         <div style="display:flex; background:#111; height:22px; border-bottom: 1px solid #333;">
                             <div style="flex:1; display:flex; border-right:1px solid #333;">
-                                <div style="flex:1; background:#0055aa; display:flex; justify-content:center; align-items:center; border-right:1px solid #222; font-size:12px;">🎵🔒</div>
-                                <div style="flex:1; background:#0055aa; color:#fff; font-size:9px; font-weight:bold; display:flex; justify-content:center; align-items:center;">SYNC</div>
+                                <div id="wave-keylock-1" onclick="toggleWaveControl(1, 'keylock')" style="flex:1; background:#222; color:#888; display:flex; justify-content:center; align-items:center; border-right:1px solid #222; font-size:12px; cursor:pointer;">🎵🔒</div>
+                                <div id="wave-sync-1" onclick="toggleWaveControl(1, 'sync')" style="flex:1; background:#222; color:#888; font-size:9px; font-weight:bold; display:flex; justify-content:center; align-items:center; cursor:pointer;">SYNC</div>
                             </div>
                             <div style="flex:1; display:flex;">
-                                <div style="flex:1; background:#222; color:#888; font-size:9px; font-weight:bold; display:flex; justify-content:center; align-items:center; border-right:1px solid #111;">SYNC</div>
-                                <div style="flex:1; background:#222; color:#888; display:flex; justify-content:center; align-items:center; font-size:12px;">🎵🔒</div>
+                                <div id="wave-sync-2" onclick="toggleWaveControl(2, 'sync')" style="flex:1; background:#222; color:#888; font-size:9px; font-weight:bold; display:flex; justify-content:center; align-items:center; border-right:1px solid #111; cursor:pointer;">SYNC</div>
+                                <div id="wave-keylock-2" onclick="toggleWaveControl(2, 'keylock')" style="flex:1; background:#222; color:#888; display:flex; justify-content:center; align-items:center; font-size:12px; cursor:pointer;">🎵🔒</div>
                             </div>
                         </div>
 
@@ -970,13 +970,13 @@
                         <div style="text-align:center; font-size:8px; color:#aaa; padding:2px 0; border-bottom:1px solid #333;">crate / All</div>
                         <div style="display:flex; background:#111; color:#fff; font-size:9px; border-bottom:1px solid #333;">
                             <div style="flex:1; text-align:center; padding:2px; border-right:1px solid #222;">
-                                <div>DECK1</div><div style="color:#aaa;">110.0 <span class="key-badge" style="background:#ffaa00;">4A</span></div>
+                                <div>DECK1</div><div id="browse-deck-info-1" style="color:#aaa;">110.0 <span class="key-badge" style="background:#ffaa00;">4A</span></div>
                             </div>
                             <div style="padding:2px 6px; display:flex; align-items:center; background:#222; border-right:1px solid #222;">
                                 BPM ▼
                             </div>
                             <div style="flex:1; text-align:center; padding:2px;">
-                                <div>DECK2</div><div style="color:#aaa;">110.0 <span class="key-badge" style="background:#00ff00;">8A</span></div>
+                                <div>DECK2</div><div id="browse-deck-info-2" style="color:#aaa;">110.0 <span class="key-badge" style="background:#00ff00;">8A</span></div>
                             </div>
                         </div>
                         <div class="s11-track-list">
@@ -1686,12 +1686,59 @@
         }
     }
 
+    function updateWaveformHeaderUI() {
+        decks.forEach((deck, i) => {
+            if (!deck) return;
+            const deckNum = i + 1;
+            const bpm = parseFloat(deck.audioEl?.dataset?.bpm || '110');
+            const bpmText = Number.isFinite(bpm) ? bpm.toFixed(1) : '110.0';
+
+            const bpmEl = document.getElementById(`wave-bpm-${deckNum}`);
+            if (bpmEl) bpmEl.textContent = bpmText;
+
+            const syncEl = document.getElementById(`wave-sync-${deckNum}`);
+            if (syncEl) {
+                syncEl.style.background = deck.isSyncOn ? '#0055aa' : '#222';
+                syncEl.style.color = deck.isSyncOn ? '#fff' : '#888';
+            }
+
+            const keyEl = document.getElementById(`wave-keylock-${deckNum}`);
+            if (keyEl) {
+                keyEl.style.background = deck.isKeyLockOn ? '#0055aa' : '#222';
+                keyEl.style.color = deck.isKeyLockOn ? '#fff' : '#888';
+            }
+
+            const browseInfo = document.getElementById(`browse-deck-info-${deckNum}`);
+            if (browseInfo) {
+                const keyColor = deck.isKeyLockOn ? '#ffaa00' : '#555';
+                browseInfo.innerHTML = `${bpmText} <span class="key-badge" style="background:${keyColor};">${deckNum === 1 ? '4A' : '8A'}</span>`;
+            }
+        });
+    }
+
+    function toggleWaveControl(deckNum, action) {
+        const deck = decks[deckNum - 1];
+        if (!deck) return;
+        if (action === 'keylock') {
+            deck.isKeyLockOn = !deck.isKeyLockOn;
+            deck.audioEl.preservesPitch = deck.isKeyLockOn;
+            deck.audioEl.mozPreservesPitch = deck.isKeyLockOn;
+            deck.audioEl.webkitPreservesPitch = deck.isKeyLockOn;
+        } else if (action === 'sync') {
+            deck.isSyncOn = isShiftDown ? false : !deck.isSyncOn;
+        }
+        updatePadStatus(deckNum);
+        updateWaveformHeaderUI();
+    }
+
     function touchMidiControl(action, deckNum) {
         const deck = decks[deckNum - 1];
         if (!deck) return;
         if (action === 'keylock') {
             deck.isKeyLockOn = !deck.isKeyLockOn;
             deck.audioEl.preservesPitch = deck.isKeyLockOn;
+            deck.audioEl.mozPreservesPitch = deck.isKeyLockOn;
+            deck.audioEl.webkitPreservesPitch = deck.isKeyLockOn;
         } else if (action === 'keyup') {
             deck.keyShiftSteps = Math.min(12, (deck.keyShiftSteps || 0) + 1);
             deck.audioEl.playbackRate = getPitchRateFromSteps(deck.keyShiftSteps);
@@ -1699,6 +1746,7 @@
             deck.keyShiftSteps = Math.max(-12, (deck.keyShiftSteps || 0) - 1);
             deck.audioEl.playbackRate = getPitchRateFromSteps(deck.keyShiftSteps);
         }
+        updateWaveformHeaderUI();
     }
 
     function handleFaderStart(faderId, percent) {
@@ -2028,6 +2076,7 @@
                 updateFaderAudio(id, percent);
             }
         });
+        updateWaveformHeaderUI();
     }
 
     // --- KNOB LOGIC ---
@@ -2496,6 +2545,7 @@
                 audio.pause();
             }
         }
+        updateWaveformHeaderUI();
     }
 
     function triggerPadFX(deckNum, padIdx) {
