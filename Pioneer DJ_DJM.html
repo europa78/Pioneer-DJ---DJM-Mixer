@@ -1748,7 +1748,7 @@
                 on: false, amount: 0 
             },
             loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null,
-            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: globalSamplerBank, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0, SAMPLER: 0, AUTO_LOOP: 0 }, transportTempCue: null, isKeyLockOn: false, isSyncOn: false, isDvsInternal: false, padFxBank: 0
+            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: globalSamplerBank, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0, SAMPLER: 0, AUTO_LOOP: 0, SAVED_LOOP: 0 }, transportTempCue: null, isKeyLockOn: false, isSyncOn: false, isDvsInternal: false, padFxBank: 0, keyShiftRangeIndex: 1, keyShiftSteps: 0
         };
     }
 
@@ -2019,7 +2019,13 @@
         'TRANSPORT': ['#ffd166', '#ffd166', '#ff9f1c', '#ff9f1c', '#2ec4b6', '#00d9ff', '#a0c4ff', '#ff595e'],
         'PAD_FX_1': Array(8).fill('#66ccff'),
         'PAD_FX_2': Array(8).fill('#3399ff'),
-        'BEAT_JUMP': Array(8).fill('#ffb703')
+        'BEAT_JUMP': Array(8).fill('#ffb703'),
+        'KEY_SHIFT': Array(8).fill('#9b5de5'),
+        'BEAT_LOOP': Array(8).fill('#ff8800'),
+        'USER_1': Array(8).fill('#adb5bd'),
+        'USER_2': Array(8).fill('#adb5bd'),
+        'USER_3': Array(8).fill('#adb5bd'),
+        'USER_4': Array(8).fill('#adb5bd')
     };
 
     function createPads(deckNum, containerId) {
@@ -2070,16 +2076,19 @@
         let nextMode = mode;
 
         if (mode === 'HOT_CUE') {
-            if (isShiftDown) nextMode = 'PITCH_PLAY';
+            if (isShiftDown && (now - deck.lastModeTap.HOT_CUE) < modeDoubleTapWindowMs) nextMode = 'USER_1';
+            else if (isShiftDown) nextMode = 'PITCH_PLAY';
             else if ((now - deck.lastModeTap.HOT_CUE) < modeDoubleTapWindowMs) nextMode = 'GATE_CUE';
             deck.lastModeTap.HOT_CUE = now;
         } else if (mode === 'ROLL') {
-            if (isShiftDown) nextMode = 'PAD_FX_2';
+            if (isShiftDown && (now - deck.lastModeTap.ROLL) < modeDoubleTapWindowMs) nextMode = 'USER_2';
+            else if (isShiftDown) nextMode = 'PAD_FX_2';
             else if ((now - deck.lastModeTap.ROLL) < modeDoubleTapWindowMs) nextMode = 'CUE_LOOP';
             else nextMode = 'PAD_FX_1';
             deck.lastModeTap.ROLL = now;
         } else if (mode === 'SAMPLER') {
-            if (isShiftDown) nextMode = 'SCRATCH_BANK';
+            if (isShiftDown && (now - deck.lastModeTap.SAMPLER) < modeDoubleTapWindowMs) nextMode = 'USER_4';
+            else if (isShiftDown) nextMode = 'KEY_SHIFT';
             else if ((now - deck.lastModeTap.SAMPLER) < modeDoubleTapWindowMs) nextMode = 'TRANSPORT';
             deck.lastModeTap.SAMPLER = now;
         }
@@ -2120,6 +2129,8 @@
             if (deck.padMode === 'BEAT_JUMP') isActive = true;
             if (deck.padMode === 'TRANSPORT') isActive = true;
             if (deck.padMode === 'PAD_FX_1' || deck.padMode === 'PAD_FX_2') isActive = true;
+            if (deck.padMode === 'KEY_SHIFT' || deck.padMode === 'BEAT_LOOP') isActive = true;
+            if (deck.padMode.startsWith('USER_')) isActive = true;
 
             if(isActive) {
                 pad.style.opacity = '1';
@@ -2149,6 +2160,7 @@
     const padFxAmounts = [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0];
     const beatJumpBeats = [-1, 1, -2, 2, -4, 4, -8, 8];
     const padFxLabels = [['Effect A','Effect B','Effect C','Effect D','Effect E','Effect F','Effect G','Effect H'], ['Effect I','Effect J','Effect K','Effect L','Effect M','Effect N','Effect O','Effect P']];
+    const keyShiftRangeNames = ['UP', 'MIDDLE', 'DOWN'];
 
 
 
@@ -2180,6 +2192,12 @@
             msg += ` | PAD FX ${deck.padMode.endsWith('_2') ? '2' : '1'} | BANK ${deck.padFxBank === 0 ? 'A-H' : 'I-P'}`;
         } else if (deck.padMode === 'BEAT_JUMP') {
             msg += ` | PADS: -1,+1,-2,+2,-4,+4,-8,+8 BEATS`;
+        } else if (deck.padMode === 'KEY_SHIFT') {
+            msg += ` | RANGE ${keyShiftRangeNames[deck.keyShiftRangeIndex]} | PAD=KEY SHIFT`;
+        } else if (deck.padMode === 'BEAT_LOOP') {
+            msg += ` | PAD=LOOP LENGTH (HOLD)`;
+        } else if (deck.padMode.startsWith('USER_')) {
+            msg += ` | MIDI USER MODE`;
         }
         el.textContent = msg;
     }
@@ -2215,6 +2233,10 @@
             deck.cueLoopSizeIndex = Math.max(0, Math.min(cueLoopBeatLengths.length - 1, deck.cueLoopSizeIndex + direction));
         } else if (deck.padMode === 'PAD_FX_1' || deck.padMode === 'PAD_FX_2') {
             deck.padFxBank = (deck.padFxBank + (direction > 0 ? 1 : -1) + 2) % 2;
+        } else if (deck.padMode === 'KEY_SHIFT') {
+            deck.keyShiftRangeIndex = (deck.keyShiftRangeIndex + (direction > 0 ? 1 : -1) + 3) % 3;
+        } else if (deck.padMode === 'BEAT_LOOP') {
+            deck.cueLoopSizeIndex = Math.max(0, Math.min(cueLoopBeatLengths.length - 1, deck.cueLoopSizeIndex + direction));
         }
 
         updatePadStatus(deckNum);
@@ -2317,6 +2339,14 @@
         const jumpSeconds = jumpBeats * getDeckBeatLengthSeconds(deck);
         const next = Math.max(0, Math.min(deck.duration, deck.audioEl.currentTime + jumpSeconds));
         deck.audioEl.currentTime = next;
+    }
+
+    function triggerKeyShiftPad(deckNum, padIdx) {
+        const deck = decks[deckNum - 1];
+        if (!deck) return;
+        const steps = pitchRanges[deck.keyShiftRangeIndex][padIdx] || 0;
+        deck.keyShiftSteps = steps;
+        deck.audioEl.playbackRate = getPitchRateFromSteps(steps);
     }
 
     function triggerTransportPad(deckNum, padIdx, onRelease = false) {
@@ -2439,8 +2469,18 @@
             if (isShiftDown) triggerBeatJumpPad(deckNum, padIdx);
             else triggerAutoLoopPad(deckNum, padIdx);
         }
+        else if (deck.padMode === 'BEAT_LOOP') {
+            triggerAutoLoopPad(deckNum, padIdx);
+        }
         else if (deck.padMode === 'BEAT_JUMP') {
             triggerBeatJumpPad(deckNum, padIdx);
+        }
+        else if (deck.padMode === 'KEY_SHIFT') {
+            triggerKeyShiftPad(deckNum, padIdx);
+        }
+        else if (deck.padMode.startsWith('USER_')) {
+            // Placeholder MIDI-user mode feedback
+            padEl.classList.add('active');
         }
         else if (deck.padMode === 'TRANSPORT') {
             triggerTransportPad(deckNum, padIdx, false);
@@ -2902,8 +2942,13 @@
 
         const now = performance.now();
         if (isShiftDown) {
-            // SHIFT + SAVED LOOP enters Saved Flip mode
-            deck.padMode = 'SAVED_FLIP';
+            if ((now - deck.lastModeTap.SAVED_LOOP) < modeDoubleTapWindowMs) {
+                deck.padMode = 'USER_3';
+            } else {
+                // SHIFT + SAVED LOOP enters Beat Loop mode
+                deck.padMode = 'BEAT_LOOP';
+            }
+            deck.lastModeTap.SAVED_LOOP = now;
             updatePadStatus(deckNum);
             updatePadLights(deckNum);
             return;
