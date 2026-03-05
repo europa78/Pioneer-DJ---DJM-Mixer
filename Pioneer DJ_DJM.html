@@ -860,6 +860,8 @@
                         <div class="screen-tab" onclick="switchTab(1)">FX</div>
                         <div class="screen-tab" onclick="switchTab(2)">MENU</div>
                         <div class="screen-tab" onclick="switchTab(3)">BROWSE</div>
+                        <div class="screen-tab" onclick="switchTab(4)">MIDI</div>
+                        <div class="screen-tab" onclick="switchTab(5)">SET</div>
                     </div>
                     
                     <div class="screen-content active" id="tab-0" style="padding: 0; justify-content: space-between;">
@@ -921,7 +923,7 @@
                     <div class="screen-content" id="tab-2" style="padding: 0; background: #050505; display: flex; flex-direction: column;">
                         <div style="background:#1a1a1a; color:#fff; padding:6px 10px; font-size:12px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
                             <span>MENU</span>
-                            <span style="background:#333; padding:2px 6px; border-radius:2px;">⚙️</span>
+                            <span style="background:#333; padding:2px 6px; border-radius:2px; cursor:pointer;" onclick="switchTab(5)">⚙️</span>
                         </div>
                         <div style="padding:4px; display:flex; flex-direction:column; gap:4px; flex:1;">
                             <div class="s11-menu-grid">
@@ -933,7 +935,7 @@
                                     <span style="color:#fff; font-size:18px; margin-bottom:2px;">🔧<span style="color:#00aaff;font-size:10px;">FX</span></span>
                                     FX SETTING
                                 </div>
-                                <div class="s11-menu-btn">
+                                <div class="s11-menu-btn" onclick="switchTab(4)">
                                     <span style="color:#00aaff; font-size:16px; margin-bottom:2px;">▦</span>
                                     TOUCH MIDI
                                 </div>
@@ -1025,6 +1027,32 @@
                     </div>
                 </div>
             </div>
+
+
+                    <div class="screen-content" id="tab-4" style="padding: 8px; background: #050505; display:flex; flex-direction:column; gap:6px;">
+                        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px;">
+                            <div class="s11-menu-btn" onclick="touchMidiSetType(0)">A</div>
+                            <div class="s11-menu-btn" onclick="touchMidiSetType(1)">B</div>
+                            <div class="s11-menu-btn" onclick="touchMidiSetType(2)">C</div>
+                            <div class="s11-menu-btn" onclick="touchMidiSetType(3)">D</div>
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px; flex:1;">
+                            <div class="s11-menu-btn" onclick="touchMidiControl('keylock',1)">KEY LOCK 1</div>
+                            <div class="s11-menu-btn" onclick="touchMidiControl('keylock',2)">KEY LOCK 2</div>
+                            <div class="s11-menu-btn" onclick="touchMidiControl('keyup',1)">KEY UP 1</div>
+                            <div class="s11-menu-btn" onclick="touchMidiControl('keyup',2)">KEY UP 2</div>
+                            <div class="s11-menu-btn" onclick="touchMidiControl('keydown',1)">KEY DOWN 1</div>
+                            <div class="s11-menu-btn" onclick="touchMidiControl('keydown',2)">KEY DOWN 2</div>
+                        </div>
+                        <div class="s11-screen-fxbar"><div id="touch-midi-status" style="font-size:12px;">TOUCH MIDI: TYPE A</div></div>
+                    </div>
+
+                    <div class="screen-content" id="tab-5" style="padding: 8px; background: #050505; display:flex; flex-direction:column; gap:6px;">
+                        <div class="s11-menu-btn" onclick="setUtilityOption('crossfaderThru')">CROSSFADER THRU: <span id="util-crossfaderThru">OFF</span></div>
+                        <div class="s11-menu-btn" onclick="setUtilityOption('loopOption')">LOOP OPTION: <span id="util-loopOption">OFF</span></div>
+                        <div class="s11-menu-btn" onclick="setUtilityOption('loopLengthBeats')">LOOP LENGTH: <span id="util-loopLength">1</span> BEATS</div>
+                        <div class="s11-menu-btn" onclick="setUtilityOption('faderStart')">FADER START: <span id="util-faderStart">OFF</span></div>
+                    </div>
 
             <!-- Screen Controls -->
             <div class="flex-row mt-10 w-full" style="justify-content: center;">
@@ -1614,12 +1642,86 @@
     let ch1Reverse = false;
     let ch2Reverse = false;
     let isShiftDown = false;
+    let touchMidiType = 0;
+    const utilitySettings = { crossfaderThru: false, loopOption: false, loopLengthBeats: 1, faderStart: "OFF" };
 
     function toggleShift() {
         isShiftDown = !isShiftDown;
         document.getElementById('shift-btn').classList.toggle('active', isShiftDown);
         updatePadStatus(1);
         updatePadStatus(2);
+    }
+
+    function updateUtilityUI() {
+        const m = {
+            crossfaderThru: utilitySettings.crossfaderThru ? 'ON' : 'OFF',
+            loopOption: utilitySettings.loopOption ? 'ON' : 'OFF',
+            loopLength: utilitySettings.loopLengthBeats,
+            faderStart: utilitySettings.faderStart
+        };
+        if (document.getElementById('util-crossfaderThru')) document.getElementById('util-crossfaderThru').innerText = m.crossfaderThru;
+        if (document.getElementById('util-loopOption')) document.getElementById('util-loopOption').innerText = m.loopOption;
+        if (document.getElementById('util-loopLength')) document.getElementById('util-loopLength').innerText = m.loopLength;
+        if (document.getElementById('util-faderStart')) document.getElementById('util-faderStart').innerText = m.faderStart;
+    }
+
+    function setUtilityOption(name) {
+        if (name === 'crossfaderThru') utilitySettings.crossfaderThru = !utilitySettings.crossfaderThru;
+        else if (name === 'loopOption') utilitySettings.loopOption = !utilitySettings.loopOption;
+        else if (name === 'loopLengthBeats') {
+            const vals = [0.25, 0.5, 1, 2, 4, 8, 16];
+            const idx = vals.indexOf(utilitySettings.loopLengthBeats);
+            utilitySettings.loopLengthBeats = vals[(idx + 1) % vals.length];
+        } else if (name === 'faderStart') {
+            utilitySettings.faderStart = utilitySettings.faderStart === 'OFF' ? 'CUE' : utilitySettings.faderStart === 'CUE' ? 'HOT CUE' : 'OFF';
+        }
+        updateUtilityUI();
+    }
+
+    function touchMidiSetType(type) {
+        touchMidiType = type;
+        const labels = ['A', 'B', 'C', 'D'];
+        if (document.getElementById('touch-midi-status')) {
+            document.getElementById('touch-midi-status').innerText = `TOUCH MIDI: TYPE ${labels[type]}`;
+        }
+    }
+
+    function touchMidiControl(action, deckNum) {
+        const deck = decks[deckNum - 1];
+        if (!deck) return;
+        if (action === 'keylock') {
+            deck.isKeyLockOn = !deck.isKeyLockOn;
+            deck.audioEl.preservesPitch = deck.isKeyLockOn;
+        } else if (action === 'keyup') {
+            deck.keyShiftSteps = Math.min(12, (deck.keyShiftSteps || 0) + 1);
+            deck.audioEl.playbackRate = getPitchRateFromSteps(deck.keyShiftSteps);
+        } else if (action === 'keydown') {
+            deck.keyShiftSteps = Math.max(-12, (deck.keyShiftSteps || 0) - 1);
+            deck.audioEl.playbackRate = getPitchRateFromSteps(deck.keyShiftSteps);
+        }
+    }
+
+    function handleFaderStart(faderId, percent) {
+        if (utilitySettings.faderStart === 'OFF') return;
+        if (faderId !== 'fader-ch1' && faderId !== 'fader-ch2') return;
+        const deckNum = faderId === 'fader-ch1' ? 1 : 2;
+        const deck = decks[deckNum - 1];
+        if (!deck || !deck.audioEl || !deck.audioEl.src) return;
+
+        if (percent < 95 && deck.audioEl.paused) {
+            if (utilitySettings.faderStart === 'HOT CUE') {
+                const firstCue = deck.hotCues.find(c => c !== null);
+                if (firstCue !== undefined) deck.audioEl.currentTime = firstCue;
+            }
+            deck.audioEl.play().catch(() => {});
+        }
+        if (percent >= 99 && !deck.audioEl.paused) {
+            deck.audioEl.pause();
+            if (utilitySettings.faderStart === 'HOT CUE') {
+                const firstCue = deck.hotCues.find(c => c !== null);
+                if (firstCue !== undefined) deck.audioEl.currentTime = firstCue;
+            }
+        }
     }
 
     function toggleCfReverse(el) {
@@ -1662,6 +1764,7 @@
         syncAllControls();
         updatePadStatus(1);
         updatePadStatus(2);
+        updateUtilityUI();
         startMetering();
     }
 
@@ -1885,7 +1988,10 @@
             const curveKnob = document.getElementById('cf-curve');
             const curveVal = curveKnob ? parseFloat(curveKnob.getAttribute('data-val')) : 0;
             
-            if (curveVal > 50) {
+            if (utilitySettings.crossfaderThru) {
+                decks[0].crossFader.gain.value = 1;
+                decks[1].crossFader.gain.value = 1;
+            } else if (curveVal > 50) {
                 // Sharp Cut Curve
                 decks[0].crossFader.gain.value = x < 0.95 ? 1 : 0;
                 decks[1].crossFader.gain.value = x > 0.05 ? 1 : 0;
@@ -1988,6 +2094,7 @@
                 percent = Math.max(0, Math.min(100, percent));
                 cap.style.top = `${percent}%`;
                 updateFaderAudio(faderId, percent);
+                handleFaderStart(faderId, percent);
             }
         });
 
@@ -2967,7 +3074,8 @@
             document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
         } else {
             deck.loopIn = deck.audioEl.currentTime;
-            deck.loopOut = Math.min(deck.loopIn + getLoopLengthSecondsFromIndex(deck), deck.duration);
+            const len = utilitySettings.loopOption ? (utilitySettings.loopLengthBeats * getDeckBeatLengthSeconds(deck)) : getLoopLengthSecondsFromIndex(deck);
+            deck.loopOut = Math.min(deck.loopIn + len, deck.duration);
             deck.loopActive = true;
             document.getElementById(`loop-active-${deckNum}`).classList.add('active');
         }
