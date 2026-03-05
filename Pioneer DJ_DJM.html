@@ -1748,7 +1748,7 @@
                 on: false, amount: 0 
             },
             loopIn: null, loopOut: null, loopActive: false, duration: 0, peaks: null, audioBuffer: null, objectUrl: null,
-            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: 0, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0, SAMPLER: 0, AUTO_LOOP: 0 }, transportTempCue: null, isKeyLockOn: false, isSyncOn: false, isDvsInternal: false, padFxBank: 0
+            padMode: 'HOT_CUE', hotCues: Array(8).fill(null), slices: [], activeSourceNode: null, sliceThreshold: 0, samplerBank: globalSamplerBank, scratchBank: 0, pitchRangeIndex: 1, slicerDomainIndex: 2, slicerQuantIndex: 3, cueLoopSizeIndex: 3, flipSlots: Array(8).fill(null), gateCuePad: null, lastModeTap: { HOT_CUE: 0, ROLL: 0, SAMPLER: 0, AUTO_LOOP: 0 }, transportTempCue: null, isKeyLockOn: false, isSyncOn: false, isDvsInternal: false, padFxBank: 0
         };
     }
 
@@ -2134,6 +2134,7 @@
     const rollTimes = [0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0]; // seconds (assuming ~120bpm)
 
     const samplerBankLabels = ['A', 'B', 'C', 'D'];
+    let globalSamplerBank = 0;
     const pitchRanges = [
         [4, 5, 6, 7, 0, 1, 2, 3],
         [0, 1, 2, 3, -4, -3, -2, -1],
@@ -2158,7 +2159,7 @@
 
         let msg = `MODE: ${deck.padMode.replace('_', ' ')}`;
         if (deck.padMode === 'SAMPLER') {
-            msg += ` | BANK ${samplerBankLabels[deck.samplerBank]}`;
+            msg += ` | BANK ${samplerBankLabels[deck.samplerBank]} | SHIFT+PARAM`;
         } else if (deck.padMode === 'SCRATCH_BANK') {
             msg += ` | BANK ${samplerBankLabels[deck.scratchBank]} | SHIFT+SAMPLER`;
         } else if (deck.padMode === 'PITCH_PLAY') {
@@ -2188,7 +2189,10 @@
         if (!deck) return;
 
         if (deck.padMode === 'SAMPLER') {
-            deck.samplerBank = (deck.samplerBank + direction + samplerBankLabels.length) % samplerBankLabels.length;
+            if (isShiftDown) {
+                globalSamplerBank = (globalSamplerBank + direction + samplerBankLabels.length) % samplerBankLabels.length;
+                decks.forEach((d) => { if (d) d.samplerBank = globalSamplerBank; });
+            }
         } else if (deck.padMode === 'SCRATCH_BANK') {
             deck.scratchBank = (deck.scratchBank + direction + samplerBankLabels.length) % samplerBankLabels.length;
         } else if (deck.padMode === 'PITCH_PLAY') {
@@ -2418,6 +2422,10 @@
                 deck.hotCues[padIdx] = deck.audioEl.currentTime;
                 updatePadLights(deckNum);
             } else {
+                if (deck.hotCues[padIdx] === null) {
+                    deck.hotCues[padIdx] = deck.audioEl.currentTime;
+                    updatePadLights(deckNum);
+                }
                 playPitchPad(deck, deckNum, padIdx);
             }
         }
