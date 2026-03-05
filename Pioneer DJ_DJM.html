@@ -2254,6 +2254,24 @@
         return 60 / (Number.isFinite(bpm) && bpm > 0 ? bpm : 120);
     }
 
+    function getLoopLengthSecondsFromIndex(deck) {
+        const beats = cueLoopBeatLengths[deck.cueLoopSizeIndex] ?? 1;
+        return beats * getDeckBeatLengthSeconds(deck);
+    }
+
+    function syncCueLoopIndexFromLoop(deck) {
+        if (deck.loopIn === null || deck.loopOut === null) return;
+        const beatLen = getDeckBeatLengthSeconds(deck);
+        const loopBeats = (deck.loopOut - deck.loopIn) / beatLen;
+        let bestIdx = 0;
+        let bestDiff = Infinity;
+        for (let i = 0; i < cueLoopBeatLengths.length; i++) {
+            const diff = Math.abs(cueLoopBeatLengths[i] - loopBeats);
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+        }
+        deck.cueLoopSizeIndex = bestIdx;
+    }
+
     function triggerSlicerLoopPad(deck, padIdx) {
         if (!deck.audioBuffer || !deck.duration) return;
         const beatLen = getDeckBeatLengthSeconds(deck);
@@ -2800,7 +2818,7 @@
     function handleLoopInHalf(deckNum) {
         const deck = decks[deckNum - 1];
         if (!deck || !deck.duration) return;
-        
+
         if (isShiftDown) {
             // SHIFT + 1/2X = IN point
             deck.loopIn = deck.audioEl.currentTime;
@@ -2810,31 +2828,40 @@
                 document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
             }
         } else {
-            // 1/2X
+            // 1/2X (or step selected loop length down)
             if (deck.loopActive && deck.loopIn !== null && deck.loopOut !== null) {
                 const len = deck.loopOut - deck.loopIn;
-                deck.loopOut = deck.loopIn + (len / 2);
+                deck.loopOut = Math.max(deck.loopIn + 0.03, deck.loopIn + (len / 2));
+                syncCueLoopIndexFromLoop(deck);
+            } else {
+                deck.cueLoopSizeIndex = Math.max(0, deck.cueLoopSizeIndex - 1);
             }
         }
+        updatePadStatus(deckNum);
         updateLoopUI(deckNum);
     }
     
     function handleLoopOutDouble(deckNum) {
         const deck = decks[deckNum - 1];
         if (!deck || !deck.duration) return;
-        
+
         if (isShiftDown) {
             // SHIFT + 2X = OUT point
             deck.loopOut = Math.max(deck.audioEl.currentTime, deck.loopIn || 0);
             deck.loopActive = true;
             document.getElementById(`loop-active-${deckNum}`).classList.add('active');
+            syncCueLoopIndexFromLoop(deck);
         } else {
-            // 2X
+            // 2X (or step selected loop length up)
             if (deck.loopActive && deck.loopIn !== null && deck.loopOut !== null) {
                 const len = deck.loopOut - deck.loopIn;
                 deck.loopOut = Math.min(deck.loopIn + (len * 2), deck.duration);
+                syncCueLoopIndexFromLoop(deck);
+            } else {
+                deck.cueLoopSizeIndex = Math.min(cueLoopBeatLengths.length - 1, deck.cueLoopSizeIndex + 1);
             }
         }
+        updatePadStatus(deckNum);
         updateLoopUI(deckNum);
     }
     
@@ -2864,7 +2891,7 @@
             document.getElementById(`loop-active-${deckNum}`).classList.remove('active');
         } else {
             deck.loopIn = deck.audioEl.currentTime;
-            deck.loopOut = Math.min(deck.loopIn + 2.0, deck.duration);
+            deck.loopOut = Math.min(deck.loopIn + getLoopLengthSecondsFromIndex(deck), deck.duration);
             deck.loopActive = true;
             document.getElementById(`loop-active-${deckNum}`).classList.add('active');
         }
