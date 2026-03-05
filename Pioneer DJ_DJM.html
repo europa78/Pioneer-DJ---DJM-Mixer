@@ -848,7 +848,7 @@
                 </div>
                 <div class="knob-wrapper">
                     <span class="label">MASTER LEVEL</span>
-                    <div class="knob-bg"><div class="knob" id="master-level" data-val="-135"><div class="knob-pointer"></div></div></div>
+                    <div class="knob-bg"><div class="knob" id="master-level" data-val="0"><div class="knob-pointer"></div></div></div>
                 </div>
             </div>
 
@@ -1827,6 +1827,11 @@
         }
     }
 
+    function getPercentFromStyle(value, fallback) {
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
     function updateAudioParam(id, val) {
         if (!audioCtx || !id) return;
         const normalized = (val + 135) / 270; // 0.0 to 1.0
@@ -1853,7 +1858,7 @@
         if (id === 'cf-curve') {
             const cap = document.getElementById('crossfader');
             if(cap) {
-                let percent = parseFloat(cap.style.left) || 50;
+                let percent = getPercentFromStyle(cap.style.left, 50);
                 updateFaderAudio('crossfader', percent);
             }
         }
@@ -1910,9 +1915,9 @@
                 const isHoriz = id === 'crossfader';
                 let percent = 50;
                 if(isHoriz) {
-                    percent = parseFloat(cap.style.left) || 50;
+                    percent = getPercentFromStyle(cap.style.left, 50);
                 } else {
-                    percent = parseFloat(cap.style.top) || 100; // Default off
+                    percent = getPercentFromStyle(cap.style.top, 100); // Default off
                 }
                 updateFaderAudio(id, percent);
             }
@@ -2236,7 +2241,7 @@
 
         const tempFader = audioCtx.createGain();
         const faderCap = document.getElementById(`fader-ch${deckNum}`);
-        const percent = parseFloat(faderCap.style.top) || 80;
+        const percent = getPercentFromStyle(faderCap.style.top, 80);
         tempFader.gain.value = Math.pow(1 - (percent / 100), 2);
 
         src.connect(deck.filterHP).connect(tempFader).connect(deck.crossFader);
@@ -2421,7 +2426,7 @@
                 deck.activeSourceNode = null;
                 // Unmute original fader (Slip mode logic)
                 const faderCap = document.getElementById(`fader-ch${deckNum}`);
-                const percent = parseFloat(faderCap.style.top) || 80;
+                const percent = getPercentFromStyle(faderCap.style.top, 80);
                 updateFaderAudio(`fader-ch${deckNum}`, percent); 
             }
         }
@@ -2462,7 +2467,7 @@
         // Route through same channel EQ/Filter/Fader path but bypass standard linefader mute
         const tempFader = audioCtx.createGain();
         const faderCap = document.getElementById(`fader-ch${decks.indexOf(deck)+1}`);
-        const percent = parseFloat(faderCap.style.top) || 80;
+        const percent = getPercentFromStyle(faderCap.style.top, 80);
         tempFader.gain.value = Math.pow(1 - (percent / 100), 2);
 
         src.connect(deck.filterHP).connect(tempFader).connect(deck.crossFader);
