@@ -2942,6 +2942,117 @@
         updatePadLights(deckNum);
     }
 
+    function getWavePalette(deckNum) {
+        if (deckNum === 1) {
+            return ['#ff3b30', '#ff6a00', '#ffb300', '#ff2fd1', '#ffd166'];
+        }
+        return ['#1fb6ff', '#00e5ff', '#7a5cff', '#9ef01a', '#c6f7ff'];
+    }
+
+    function drawWaveformBackdrop(ctx, width, height) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 1; i < 8; i++) {
+            const y = (i / 8) * height;
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+        ctx.stroke();
+    }
+
+    function drawStylizedWaveform(ctx, width, height, deckNum, sampleAtY) {
+        drawWaveformBackdrop(ctx, width, height);
+
+        const palette = getWavePalette(deckNum);
+        const sideW = Math.max(12, width * 0.14);
+        const gutter = Math.max(4, width * 0.04);
+        const mainX = sideW + gutter;
+        const mainW = Math.max(10, width - ((sideW + gutter) * 2));
+
+        // section separators to emulate multi-column waveform screen
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(sideW, 0); ctx.lineTo(sideW, height);
+        ctx.moveTo(mainX, 0); ctx.lineTo(mainX, height);
+        ctx.moveTo(mainX + mainW, 0); ctx.lineTo(mainX + mainW, height);
+        ctx.moveTo(width - sideW, 0); ctx.lineTo(width - sideW, height);
+        ctx.stroke();
+
+        const mainCenter = mainX + (mainW / 2);
+        const leftCenter = sideW / 2;
+        const rightCenter = width - (sideW / 2);
+
+        for (let y = 0; y < height; y++) {
+            const { min, max, energy } = sampleAtY(y);
+            const amp = Math.min(1, Math.max(Math.abs(min), Math.abs(max), energy));
+            const color = palette[(Math.floor((y / 20) + (amp * 6)) % palette.length)];
+
+            // Main detailed waveform (multi-layer bands)
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.95;
+            ctx.beginPath();
+            ctx.moveTo(mainCenter - (amp * mainW * 0.48), y + 0.5);
+            ctx.lineTo(mainCenter + (amp * mainW * 0.48), y + 0.5);
+            ctx.stroke();
+
+            ctx.strokeStyle = palette[(Math.floor((y / 14) + 2) % palette.length)];
+            ctx.globalAlpha = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(mainCenter - (amp * mainW * 0.30), y + 0.5);
+            ctx.lineTo(mainCenter + (amp * mainW * 0.30), y + 0.5);
+            ctx.stroke();
+
+            // Side overview waveforms
+            const sideAmp = (amp * 0.7) + 0.05;
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.moveTo(leftCenter - (sideAmp * sideW * 0.42), y + 0.5);
+            ctx.lineTo(leftCenter + (sideAmp * sideW * 0.42), y + 0.5);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(rightCenter - (sideAmp * sideW * 0.42), y + 0.5);
+            ctx.lineTo(rightCenter + (sideAmp * sideW * 0.42), y + 0.5);
+            ctx.stroke();
+
+            // Center detail columns / cue-like ticks
+            if (y % 6 === 0) {
+                ctx.globalAlpha = 0.85;
+                ctx.strokeStyle = palette[(Math.floor(y / 6) + 1) % palette.length];
+                const tick = 3 + (amp * 8);
+                ctx.beginPath();
+                ctx.moveTo(mainCenter - tick, y + 0.5);
+                ctx.lineTo(mainCenter + tick, y + 0.5);
+                ctx.stroke();
+            }
+        }
+
+        // permanent center guide column
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(mainCenter, 0);
+        ctx.lineTo(mainCenter, height);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath();
+        ctx.moveTo(mainCenter - 6, 0);
+        ctx.lineTo(mainCenter - 6, height);
+        ctx.moveTo(mainCenter + 6, 0);
+        ctx.lineTo(mainCenter + 6, height);
+        ctx.stroke();
+
+        ctx.globalAlpha = 1;
+    }
+
     function drawWaveformStatic(deckNum) {
         const deck = decks[deckNum - 1];
         if (!deck || !deck.peaks) return;
@@ -2957,28 +3068,15 @@
 
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
-        ctx.scale(dpr, dpr);
-
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, rect.width, rect.height);
-        
-        // Vertical rendering parameters
-        const centerX = rect.width / 2;
-        const height = rect.height;
-        const numPeaks = deck.peaks.length;
 
-        ctx.beginPath();
-        for (let i = 0; i < numPeaks; i++) {
-            const y = (i / numPeaks) * height; // Draw from top to bottom
-            const peak = deck.peaks[i];
-            const xMin = centerX + (peak.min * centerX * 0.9);
-            const xMax = centerX + (peak.max * centerX * 0.9);
-            ctx.moveTo(xMin, y);
-            ctx.lineTo(xMax, y);
-        }
-        
-        // Color matching Serato style based on decks (Deck 1 Orange/Red, Deck 2 Blue/Purple)
-        ctx.strokeStyle = deckNum === 1 ? '#ff5500' : '#00aaff';
-        ctx.stroke();
+        const numPeaks = deck.peaks.length;
+        drawStylizedWaveform(ctx, rect.width, rect.height, deckNum, (y) => {
+            const idx = Math.max(0, Math.min(numPeaks - 1, Math.floor((y / rect.height) * numPeaks)));
+            const p = deck.peaks[idx] || { min: 0, max: 0 };
+            return { min: p.min, max: p.max, energy: Math.max(Math.abs(p.min), Math.abs(p.max)) };
+        });
     }
 
 
@@ -3002,19 +3100,11 @@
         const arr = new Float32Array(deck.analyser.fftSize);
         deck.analyser.getFloatTimeDomainData(arr);
 
-        const centerX = rect.width / 2;
-        ctx.clearRect(0, 0, rect.width, rect.height);
-        ctx.strokeStyle = deckNum === 1 ? '#ff5500' : '#00aaff';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let y = 0; y < rect.height; y++) {
-            const idx = Math.floor((y / rect.height) * arr.length);
+        drawStylizedWaveform(ctx, rect.width, rect.height, deckNum, (y) => {
+            const idx = Math.max(0, Math.min(arr.length - 1, Math.floor((y / rect.height) * arr.length)));
             const amp = Math.max(-1, Math.min(1, arr[idx] || 0));
-            const spread = Math.abs(amp) * centerX * 0.9;
-            ctx.moveTo(centerX - spread, y);
-            ctx.lineTo(centerX + spread, y);
-        }
-        ctx.stroke();
+            return { min: -Math.abs(amp), max: Math.abs(amp), energy: Math.abs(amp) };
+        });
     }
 
     // Handle Resize mapping
