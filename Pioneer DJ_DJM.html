@@ -654,9 +654,34 @@
         .key-badge { padding: 1px 4px; border-radius: 2px; font-size: 9px; font-weight: bold; color: #000; }
 
         /* --- SIDE WAVE EDITOR --- */
-        .wave-editor-panel {
+        .wave-editor-shell {
             width: 100%;
             margin-top: 12px;
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
+        }
+        .wave-editor-zoom {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+        }
+        .wave-editor-zoom-btn {
+            width: 24px;
+            height: 24px;
+            border: 1px solid #2c3e59;
+            background: #0b1320;
+            color: #8ab4ff;
+            font-weight: 700;
+            font-size: 16px;
+            line-height: 1;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .wave-editor-zoom-btn:active { transform: translateY(1px); }
+        .wave-editor-panel {
+            flex: 1;
             border: 1px solid #1d2533;
             border-radius: 4px;
             background: linear-gradient(180deg, #0a0f16 0%, #05080d 100%);
@@ -676,7 +701,7 @@
         .wave-editor-view {
             position: relative;
             width: 100%;
-            height: 170px;
+            height: 300px;
             background: #02050a;
             border: 1px solid #1f2f45;
             overflow: hidden;
@@ -697,7 +722,6 @@
             left: 0;
             pointer-events: none;
         }
-
         /* --- VU METERS --- */
         .vu-meter-group {
             display: flex;
@@ -852,14 +876,20 @@
                 </div>
             </div>
 
-            <div class="wave-editor-panel">
-                <div class="wave-editor-head">
-                    <span>WAVEFORM EDITOR</span>
-                    <span id="wave-editor-deck-label">DECK 1</span>
+            <div class="wave-editor-shell">
+                <div class="wave-editor-zoom">
+                    <button class="wave-editor-zoom-btn" onclick="changeWaveEditorZoom(-1)" title="Zoom Out">−</button>
+                    <button class="wave-editor-zoom-btn" onclick="changeWaveEditorZoom(1)" title="Zoom In">+</button>
                 </div>
-                <div class="wave-editor-view" id="wave-editor-view" onclick="seekWaveEditor(event)">
-                    <canvas id="wave-editor-canvas"></canvas>
-                    <div class="wave-editor-playhead" id="wave-editor-playhead"></div>
+                <div class="wave-editor-panel">
+                    <div class="wave-editor-head">
+                        <span>WAVEFORM EDITOR</span>
+                        <span id="wave-editor-deck-label">DECK 1</span>
+                    </div>
+                    <div class="wave-editor-view" id="wave-editor-view" onclick="seekWaveEditor(event)">
+                        <canvas id="wave-editor-canvas"></canvas>
+                        <div class="wave-editor-playhead" id="wave-editor-playhead"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1846,6 +1876,9 @@
     let audioCtx;
     let currentBeatFX = 'ECHO';
     let activeWaveEditorDeck = 1;
+    let waveEditorZoom = 1;
+    let waveEditorViewStart = 0;
+    let waveEditorViewEnd = 1;
     const decks = [null, null];
     const master = { gain: null, analyser: null };
     const samplerBuffers = [];
@@ -3186,6 +3219,15 @@
         if (label) label.textContent = `DECK ${activeWaveEditorDeck}`;
     }
 
+    function changeWaveEditorZoom(direction) {
+        const factors = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8];
+        let idx = factors.indexOf(waveEditorZoom);
+        if (idx === -1) idx = 2;
+        idx = Math.max(0, Math.min(factors.length - 1, idx + (direction > 0 ? 1 : -1)));
+        waveEditorZoom = factors[idx];
+        drawWaveEditor(activeWaveEditorDeck);
+    }
+
     function drawWaveEditor(deckNum = activeWaveEditorDeck) {
         const deck = decks[deckNum - 1];
         const canvas = document.getElementById('wave-editor-canvas');
@@ -3212,11 +3254,21 @@
         ctx.stroke();
 
         if (deck.peaks && deck.peaks.length) {
+            const duration = deck.duration || deck.audioEl.duration || 0;
+            const frac = duration > 0 ? Math.max(0, Math.min(1, deck.audioEl.currentTime / duration)) : 0;
+            const total = deck.peaks.length;
+            const visible = Math.max(32, Math.floor(total / waveEditorZoom));
+            const center = Math.floor(frac * total);
+            const start = Math.max(0, Math.min(total - visible, center - Math.floor(visible / 2)));
+            const end = Math.min(total, start + visible);
+            waveEditorViewStart = total > 0 ? start / total : 0;
+            waveEditorViewEnd = total > 0 ? end / total : 1;
+
             ctx.strokeStyle = deckNum === 1 ? '#ff6a00' : '#00b4ff';
             ctx.lineWidth = 1;
             ctx.beginPath();
             for (let x = 0; x < rect.width; x++) {
-                const idx = Math.floor((x / rect.width) * deck.peaks.length);
+                const idx = Math.min(total - 1, start + Math.floor((x / rect.width) * (end - start)));
                 const peak = deck.peaks[idx] || { min: 0, max: 0 };
                 const centerY = rect.height / 2;
                 const y1 = centerY + (peak.min * rect.height * 0.45);
@@ -3226,19 +3278,25 @@
             }
             ctx.stroke();
         } else if (deck.analyser) {
+            waveEditorViewStart = 0;
+            waveEditorViewEnd = 1;
             const arr = new Float32Array(deck.analyser.fftSize);
             deck.analyser.getFloatTimeDomainData(arr);
             ctx.strokeStyle = deckNum === 1 ? '#ff6a00' : '#00b4ff';
             ctx.lineWidth = 1;
             ctx.beginPath();
+            const span = Math.max(8, Math.floor(arr.length / waveEditorZoom));
             for (let x = 0; x < rect.width; x++) {
-                const idx = Math.floor((x / rect.width) * arr.length);
+                const idx = Math.min(arr.length - 1, Math.floor((x / rect.width) * span));
                 const amp = Math.max(-1, Math.min(1, arr[idx] || 0));
                 const y = (rect.height / 2) + (amp * rect.height * 0.4);
                 if (x === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
+        } else {
+            waveEditorViewStart = 0;
+            waveEditorViewEnd = 1;
         }
 
         updateWaveEditorLabel();
@@ -3255,7 +3313,10 @@
             ph.style.left = '0%';
             return;
         }
-        const pct = Math.max(0, Math.min(100, (deck.audioEl.currentTime / duration) * 100));
+        const frac = Math.max(0, Math.min(1, deck.audioEl.currentTime / duration));
+        const span = Math.max(0.0001, waveEditorViewEnd - waveEditorViewStart);
+        const local = (frac - waveEditorViewStart) / span;
+        const pct = Math.max(0, Math.min(100, local * 100));
         ph.style.left = `${pct}%`;
     }
 
@@ -3267,8 +3328,9 @@
         if (!(duration > 0)) return;
         const rect = view.getBoundingClientRect();
         const x = Math.max(0, Math.min(rect.width, evt.clientX - rect.left));
-        const pct = x / rect.width;
-        deck.audioEl.currentTime = pct * duration;
+        const local = x / rect.width;
+        const frac = waveEditorViewStart + ((waveEditorViewEnd - waveEditorViewStart) * local);
+        deck.audioEl.currentTime = Math.max(0, Math.min(duration, frac * duration));
         updateWaveEditorPlayhead();
     }
 
