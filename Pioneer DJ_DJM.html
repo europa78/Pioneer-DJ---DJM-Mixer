@@ -1917,6 +1917,12 @@
         const url = URL.createObjectURL(file);
         deck.objectUrl = url;
         deck.audioEl.src = url;
+        deck.audioEl.onloadedmetadata = () => {
+            const metaDur = Number(deck.audioEl.duration);
+            if (Number.isFinite(metaDur) && metaDur > 0) {
+                deck.duration = metaDur;
+            }
+        };
         
         // Reset loop & playback state
         deck.loopIn = null;
@@ -2740,6 +2746,10 @@
                 el.innerText = currentBeatFX;
             });
         }
+
+        // Apply immediately so locked/momentary FX state updates to the selected effect.
+        applyFXState(1);
+        applyFXState(2);
     }
 
     // --- FX PADDLES & ROUTING ---
@@ -3317,9 +3327,10 @@
         requestAnimationFrame(updatePlayheads);
         for (let i = 0; i < 2; i++) {
             const deck = decks[i];
-            if (!deck || !deck.audioEl || !deck.duration) continue;
+            if (!deck || !deck.audioEl) continue;
 
             const currTime = deck.audioEl.currentTime;
+            const duration = deck.duration || deck.audioEl.duration || 0;
 
             // Enforce Loop
             if (deck.loopActive && deck.loopOut !== null && deck.loopIn !== null) {
@@ -3336,9 +3347,11 @@
             }
 
             // Update Vertical Playhead UI
-            const percent = (currTime / deck.duration) * 100;
-            const playhead = document.getElementById(`playhead-${i + 1}`);
-            if(playhead) playhead.style.top = `${percent}%`;
+            if (duration > 0) {
+                const percent = (currTime / duration) * 100;
+                const playhead = document.getElementById(`playhead-${i + 1}`);
+                if(playhead) playhead.style.top = `${percent}%`;
+            }
 
             if (!deck.peaks || deck.waveformDecodeFailed) {
                 drawWaveformRealtimeFallback(i + 1);
