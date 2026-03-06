@@ -2013,11 +2013,13 @@
         const url = URL.createObjectURL(file);
         deck.objectUrl = url;
         deck.audioEl.src = url;
+        deck.audioEl.currentTime = 0;
         deck.audioEl.onloadedmetadata = () => {
             const metaDur = Number(deck.audioEl.duration);
             if (Number.isFinite(metaDur) && metaDur > 0) {
                 deck.duration = metaDur;
             }
+            updateWaveEditorPlayhead();
         };
         
         // Reset loop & playback state
@@ -3316,17 +3318,22 @@
         const view = document.getElementById('wave-editor-view');
         const ph = document.getElementById('wave-editor-playhead');
         if (!deck || !view || !ph) return;
+
+        const rect = view.getBoundingClientRect();
+        const drawStartX = 2;
+        const drawWidth = Math.max(1, rect.width - 4);
         const duration = deck.duration || deck.audioEl.duration || 0;
+
         if (!(duration > 0)) {
-            ph.style.left = '0%';
+            ph.style.left = `${drawStartX}px`;
             return;
         }
+
         const frac = Math.max(0, Math.min(1, deck.audioEl.currentTime / duration));
         const span = Math.max(0.0001, waveEditorViewEnd - waveEditorViewStart);
-        const local = (frac - waveEditorViewStart) / span;
-        const pct = Math.max(0, Math.min(100, local * 100));
-        const visiblePct = Math.max(0.6, Math.min(99.4, pct));
-        ph.style.left = `${visiblePct}%`;
+        const local = Math.max(0, Math.min(1, (frac - waveEditorViewStart) / span));
+        const px = drawStartX + (local * drawWidth);
+        ph.style.left = `${px}px`;
     }
 
     function seekWaveEditor(evt) {
