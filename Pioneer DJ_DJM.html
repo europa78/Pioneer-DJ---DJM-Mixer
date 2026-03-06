@@ -653,6 +653,51 @@
         .deck-badge.sync { background: #0055aa; color: #fff; }
         .key-badge { padding: 1px 4px; border-radius: 2px; font-size: 9px; font-weight: bold; color: #000; }
 
+        /* --- SIDE WAVE EDITOR --- */
+        .wave-editor-panel {
+            width: 100%;
+            margin-top: 12px;
+            border: 1px solid #1d2533;
+            border-radius: 4px;
+            background: linear-gradient(180deg, #0a0f16 0%, #05080d 100%);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            padding: 6px;
+        }
+        .wave-editor-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #8ab4ff;
+            font-size: 9px;
+            margin-bottom: 6px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+        }
+        .wave-editor-view {
+            position: relative;
+            width: 100%;
+            height: 170px;
+            background: #02050a;
+            border: 1px solid #1f2f45;
+            overflow: hidden;
+            cursor: ew-resize;
+        }
+        .wave-editor-view canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .wave-editor-playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #fff;
+            box-shadow: 0 0 6px rgba(255,255,255,0.9);
+            left: 0;
+            pointer-events: none;
+        }
+
         /* --- VU METERS --- */
         .vu-meter-group {
             display: flex;
@@ -804,6 +849,17 @@
                     <div class="fx-btn" onclick="toggleFx(this)">REVERB</div>
                     <div class="fx-btn" onclick="toggleFx(this)">VINYL<br>BRAKE</div>
                     <div class="fx-btn" onclick="toggleFx(this)">PHASER</div>
+                </div>
+            </div>
+
+            <div class="wave-editor-panel">
+                <div class="wave-editor-head">
+                    <span>WAVEFORM EDITOR</span>
+                    <span id="wave-editor-deck-label">DECK 1</span>
+                </div>
+                <div class="wave-editor-view" id="wave-editor-view" onclick="seekWaveEditor(event)">
+                    <canvas id="wave-editor-canvas"></canvas>
+                    <div class="wave-editor-playhead" id="wave-editor-playhead"></div>
                 </div>
             </div>
         </div>
@@ -1718,6 +1774,7 @@
 
     function toggleWaveControl(deckNum, action) {
         const deck = decks[deckNum - 1];
+        activeWaveEditorDeck = deckNum;
         if (!deck) return;
         if (action === 'keylock') {
             deck.isKeyLockOn = !deck.isKeyLockOn;
@@ -1788,6 +1845,7 @@
     // --- AUDIO ENGINE ---
     let audioCtx;
     let currentBeatFX = 'ECHO';
+    let activeWaveEditorDeck = 1;
     const decks = [null, null];
     const master = { gain: null, analyser: null };
     const samplerBuffers = [];
@@ -1814,6 +1872,7 @@
         updatePadStatus(2);
         updateUtilityUI();
         startMetering();
+        drawWaveEditor(activeWaveEditorDeck);
     }
 
     // Synthesize some basic built-in sampler sounds
@@ -1908,6 +1967,8 @@
         initAudio();
         audioCtx.resume();
         const deck = decks[deckNum - 1];
+        activeWaveEditorDeck = deckNum;
+        updateWaveEditorLabel();
 
         if (deck.objectUrl) {
             URL.revokeObjectURL(deck.objectUrl);
@@ -1957,6 +2018,8 @@
         audioCtx.resume();
         const deck = decks[deckNum - 1];
         if (!deck || !deck.audioEl.src) return;
+        activeWaveEditorDeck = deckNum;
+        updateWaveEditorLabel();
         
         const btn = document.getElementById(`play-btn-${deckNum}`);
         if (deck.audioEl.paused) {
@@ -2910,6 +2973,7 @@
             }
             deck.peaks = peaks;
             drawWaveformStatic(deckNum);
+            drawWaveEditor(deckNum);
             calculateSlices(deckNum);
         } catch (err) {
             const deck = decks[deckNum - 1];
@@ -3117,10 +3181,102 @@
         });
     }
 
+    function updateWaveEditorLabel() {
+        const label = document.getElementById('wave-editor-deck-label');
+        if (label) label.textContent = `DECK ${activeWaveEditorDeck}`;
+    }
+
+    function drawWaveEditor(deckNum = activeWaveEditorDeck) {
+        const deck = decks[deckNum - 1];
+        const canvas = document.getElementById('wave-editor-canvas');
+        if (!canvas || !deck) return;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        ctx.fillStyle = '#02050a';
+        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 1; i < 4; i++) {
+            const y = (i / 4) * rect.height;
+            ctx.moveTo(0, y);
+            ctx.lineTo(rect.width, y);
+        }
+        ctx.stroke();
+
+        if (deck.peaks && deck.peaks.length) {
+            ctx.strokeStyle = deckNum === 1 ? '#ff6a00' : '#00b4ff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 0; x < rect.width; x++) {
+                const idx = Math.floor((x / rect.width) * deck.peaks.length);
+                const peak = deck.peaks[idx] || { min: 0, max: 0 };
+                const centerY = rect.height / 2;
+                const y1 = centerY + (peak.min * rect.height * 0.45);
+                const y2 = centerY + (peak.max * rect.height * 0.45);
+                ctx.moveTo(x + 0.5, y1);
+                ctx.lineTo(x + 0.5, y2);
+            }
+            ctx.stroke();
+        } else if (deck.analyser) {
+            const arr = new Float32Array(deck.analyser.fftSize);
+            deck.analyser.getFloatTimeDomainData(arr);
+            ctx.strokeStyle = deckNum === 1 ? '#ff6a00' : '#00b4ff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 0; x < rect.width; x++) {
+                const idx = Math.floor((x / rect.width) * arr.length);
+                const amp = Math.max(-1, Math.min(1, arr[idx] || 0));
+                const y = (rect.height / 2) + (amp * rect.height * 0.4);
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        updateWaveEditorLabel();
+        updateWaveEditorPlayhead();
+    }
+
+    function updateWaveEditorPlayhead() {
+        const deck = decks[activeWaveEditorDeck - 1];
+        const view = document.getElementById('wave-editor-view');
+        const ph = document.getElementById('wave-editor-playhead');
+        if (!deck || !view || !ph) return;
+        const duration = deck.duration || deck.audioEl.duration || 0;
+        if (!(duration > 0)) {
+            ph.style.left = '0%';
+            return;
+        }
+        const pct = Math.max(0, Math.min(100, (deck.audioEl.currentTime / duration) * 100));
+        ph.style.left = `${pct}%`;
+    }
+
+    function seekWaveEditor(evt) {
+        const deck = decks[activeWaveEditorDeck - 1];
+        const view = document.getElementById('wave-editor-view');
+        if (!deck || !view) return;
+        const duration = deck.duration || deck.audioEl.duration || 0;
+        if (!(duration > 0)) return;
+        const rect = view.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, evt.clientX - rect.left));
+        const pct = x / rect.width;
+        deck.audioEl.currentTime = pct * duration;
+        updateWaveEditorPlayhead();
+    }
+
     // Handle Resize mapping
     window.addEventListener('resize', () => {
         drawWaveformStatic(1);
         drawWaveformStatic(2);
+        drawWaveEditor(activeWaveEditorDeck);
     });
 
     // Seek / Scrub Interaction (Vertical Update)
@@ -3357,6 +3513,8 @@
                 drawWaveformRealtimeFallback(i + 1);
             }
         }
+
+        drawWaveEditor(activeWaveEditorDeck);
     }
     updatePlayheads(); // Start render loop
 
