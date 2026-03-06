@@ -721,7 +721,7 @@
             width: 2px;
             background: #fff;
             box-shadow: 0 0 6px rgba(255,255,255,0.9);
-            left: 0;
+            left: 1px;
             pointer-events: none;
         }
         /* --- VU METERS --- */
@@ -3269,14 +3269,17 @@
             ctx.strokeStyle = deckNum === 1 ? '#ff6a00' : '#00b4ff';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            for (let x = 0; x < rect.width; x++) {
-                const idx = Math.min(total - 1, start + Math.floor((x / rect.width) * (end - start)));
+            const drawStartX = 2;
+            const drawWidth = Math.max(1, rect.width - 4);
+            for (let x = 0; x < drawWidth; x++) {
+                const idx = Math.min(total - 1, start + Math.floor((x / drawWidth) * (end - start)));
                 const peak = deck.peaks[idx] || { min: 0, max: 0 };
                 const centerY = rect.height / 2;
                 const y1 = centerY + (peak.min * rect.height * 0.45);
                 const y2 = centerY + (peak.max * rect.height * 0.45);
-                ctx.moveTo(x + 0.5, y1);
-                ctx.lineTo(x + 0.5, y2);
+                const px = drawStartX + x;
+                ctx.moveTo(px + 0.5, y1);
+                ctx.lineTo(px + 0.5, y2);
             }
             ctx.stroke();
         } else if (deck.analyser) {
@@ -3288,12 +3291,15 @@
             ctx.lineWidth = 1;
             ctx.beginPath();
             const span = Math.max(8, Math.floor(arr.length / waveEditorZoom));
-            for (let x = 0; x < rect.width; x++) {
-                const idx = Math.min(arr.length - 1, Math.floor((x / rect.width) * span));
+            const drawStartX = 2;
+            const drawWidth = Math.max(1, rect.width - 4);
+            for (let x = 0; x < drawWidth; x++) {
+                const idx = Math.min(arr.length - 1, Math.floor((x / drawWidth) * span));
                 const amp = Math.max(-1, Math.min(1, arr[idx] || 0));
                 const y = (rect.height / 2) + (amp * rect.height * 0.4);
-                if (x === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                const px = drawStartX + x;
+                if (x === 0) ctx.moveTo(px, y);
+                else ctx.lineTo(px, y);
             }
             ctx.stroke();
         } else {
@@ -3319,7 +3325,8 @@
         const span = Math.max(0.0001, waveEditorViewEnd - waveEditorViewStart);
         const local = (frac - waveEditorViewStart) / span;
         const pct = Math.max(0, Math.min(100, local * 100));
-        ph.style.left = `${pct}%`;
+        const visiblePct = Math.max(0.6, Math.min(99.4, pct));
+        ph.style.left = `${visiblePct}%`;
     }
 
     function seekWaveEditor(evt) {
@@ -3329,8 +3336,10 @@
         const duration = deck.duration || deck.audioEl.duration || 0;
         if (!(duration > 0)) return;
         const rect = view.getBoundingClientRect();
-        const x = Math.max(0, Math.min(rect.width, evt.clientX - rect.left));
-        const local = x / rect.width;
+        const drawStartX = 2;
+        const drawWidth = Math.max(1, rect.width - 4);
+        const x = Math.max(0, Math.min(drawWidth, (evt.clientX - rect.left) - drawStartX));
+        const local = x / drawWidth;
         const frac = waveEditorViewStart + ((waveEditorViewEnd - waveEditorViewStart) * local);
         deck.audioEl.currentTime = Math.max(0, Math.min(duration, frac * duration));
         updateWaveEditorPlayhead();
